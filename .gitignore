@@ -8,3 +8,4 @@ release_build/
 .vscode
 tags
 tags.*
+scripts/

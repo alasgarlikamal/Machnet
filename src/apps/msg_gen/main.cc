@@ -31,6 +31,7 @@ DEFINE_uint32(msg_window, 8, "Maximum number of messages in flight.");
 DEFINE_uint64(msg_nr, UINT64_MAX, "Number of messages to send.");
 DEFINE_bool(verify, false, "Verify payload of received messages.");
 DEFINE_bool(tx_only, false, "Run in Tx only mode.");
+DEFINE_bool(rx_only, false, "Run server in Rx only mode.");
 
 static volatile int g_keep_running = 1;
 
@@ -218,6 +219,62 @@ void ServerLoop(void *channel_ctx) {
             << stats_cur.rx_bytes << " Bytes)";
 }
 
+void ServerLoopLazy(void *channel_ctx) {
+  ThreadCtx thread_ctx(channel_ctx, nullptr /* flow info */);
+  LOG(INFO) << "Server Loop: Starting.";
+
+  while (true) {
+    if (g_keep_running == 0) {
+      LOG(INFO) << "MsgGenLoop: Exiting.";
+      break;
+    }
+
+    auto &stats_cur = thread_ctx.stats.current;
+    const auto *channel_ctx = thread_ctx.channel_ctx;
+
+    MachnetFlow_t rx_flow;
+    const ssize_t rx_size =
+        machnet_recv(channel_ctx, thread_ctx.rx_message.data(),
+                     thread_ctx.rx_message.size(), &rx_flow);
+    if (rx_size <= 0) continue;
+    stats_cur.rx_count++;
+    stats_cur.rx_bytes += rx_size;
+
+    const app_hdr_t *req_hdr =
+        reinterpret_cast<const app_hdr_t *>(thread_ctx.rx_message.data());
+    VLOG(1) << "Server: Received msg for window slot " << req_hdr->window_slot;
+
+    /* // Send the response */
+    /* app_hdr_t *resp_hdr = */
+    /*     reinterpret_cast<app_hdr_t *>(thread_ctx.tx_message.data()); */
+    /* resp_hdr->window_slot = req_hdr->window_slot; */
+
+    /* MachnetFlow_t tx_flow; */
+    /* tx_flow.dst_ip = rx_flow.src_ip; */
+    /* tx_flow.src_ip = rx_flow.dst_ip; */
+    /* tx_flow.src_port = rx_flow.dst_port; */
+    /* tx_flow.dst_port = rx_flow.src_port; */
+
+    /* const int ret = machnet_send(channel_ctx, tx_flow, */
+    /*                              thread_ctx.tx_message.data(), FLAGS_msg_size); */
+    /* if (ret == 0) { */
+    /*   stats_cur.tx_success++; */
+    /*   stats_cur.tx_bytes += FLAGS_msg_size; */
+    /* } else { */
+    /*   stats_cur.err_tx_drops++; */
+    /* } */
+
+    ReportStats(&thread_ctx);
+  }
+
+  auto &stats_cur = thread_ctx.stats.current;
+  LOG(INFO) << "Application Statistics (TOTAL) - [TX] Sent: "
+            << stats_cur.tx_success << " (" << stats_cur.tx_bytes
+            << " Bytes), Drops: " << stats_cur.err_tx_drops
+            << ", [RX] Received: " << stats_cur.rx_count << " ("
+            << stats_cur.rx_bytes << " Bytes)";
+}
+
 void ClientSendOne(ThreadCtx *thread_ctx, uint64_t window_slot) {
   VLOG(1) << "Client: Sending message for window slot " << window_slot;
   auto &stats_cur = thread_ctx->stats.current;
@@ -322,7 +379,7 @@ void ClientLoop(void *channel_ctx, MachnetFlow *flow) {
 void ClientLoopCrazy(void *channel_ctx, MachnetFlow *flow) {
   ThreadCtx thread_ctx(channel_ctx, flow);
   LOG(INFO) << "Crazy Client is In the Town!...";
-  const uint64_t rate = 1000; // pps
+  const uint64_t rate = 14000; // pps
   const auto one_sec = std::chrono::seconds(1); // one sec in ns
   auto &stats_cur = thread_ctx.stats.current;
   while (true) {
@@ -332,12 +389,15 @@ void ClientLoopCrazy(void *channel_ctx, MachnetFlow *flow) {
     }
 
     auto now = high_resolution_clock::now();
+    auto dur = now - thread_ctx.stats.last_measure_time;
+    if (dur > one_sec) {
+      LOG(INFO) << "sent: " << thread_ctx.stats.current.tx_success;
+      thread_ctx.stats.last_measure_time = now;
+      /* thread_ctx.stats.prev = thread_ctx.stats.current; */
+      stats_cur = {};
+    }
+
     if (stats_cur.tx_success > rate) {
-      auto dur = now - thread_ctx.stats.last_measure_time;
-      if (dur > one_sec) {
-        thread_ctx.stats.last_measure_time = now;
-        thread_ctx.stats.prev = thread_ctx.stats.current;
-      }
       continue;
     }
 
@@ -351,7 +411,8 @@ void ClientLoopCrazy(void *channel_ctx, MachnetFlow *flow) {
       stats_cur.tx_success++;
       stats_cur.tx_bytes += FLAGS_msg_size;
     } else {
-      LOG(WARNING) << "Client: Failed to send message for window slot ";
+      LOG(WARNING) << "Client: Failed to send message for window slot (errno:"
+        << ret << ")";
       stats_cur.err_tx_drops++;
     }
   }
@@ -404,7 +465,11 @@ int main(int argc, char *argv[]) {
     LOG(INFO) << "[LISTENING] [" << FLAGS_local_ip << ":" << FLAGS_local_port
               << "]";
 
-    datapath_thread = std::thread(ServerLoop, channel_ctx);
+    if (FLAGS_rx_only) {
+      datapath_thread = std::thread(ServerLoopLazy, channel_ctx);
+    } else {
+      datapath_thread = std::thread(ServerLoop, channel_ctx);
+    }
   }
 
   /* while (g_keep_running) sleep(5); */
