@@ -30,6 +30,7 @@ DEFINE_uint32(msg_size, 64, "Size of the message (request/response) to send.");
 DEFINE_uint32(msg_window, 8, "Maximum number of messages in flight.");
 DEFINE_uint64(msg_nr, UINT64_MAX, "Number of messages to send.");
 DEFINE_bool(verify, false, "Verify payload of received messages.");
+DEFINE_bool(tx_only, false, "Run in Tx only mode.");
 
 static volatile int g_keep_running = 1;
 
@@ -318,6 +319,44 @@ void ClientLoop(void *channel_ctx, MachnetFlow *flow) {
             << stats_cur.rx_bytes << " Bytes)";
 }
 
+void ClientLoopCrazy(void *channel_ctx, MachnetFlow *flow) {
+  ThreadCtx thread_ctx(channel_ctx, flow);
+  LOG(INFO) << "Crazy Client is In the Town!...";
+  const uint64_t rate = 1000; // pps
+  const auto one_sec = std::chrono::seconds(1); // one sec in ns
+  auto &stats_cur = thread_ctx.stats.current;
+  while (true) {
+    if (g_keep_running == 0) {
+      LOG(INFO) << "Crazy Client: Exiting.";
+      break;
+    }
+
+    auto now = high_resolution_clock::now();
+    if (stats_cur.tx_success > rate) {
+      auto dur = now - thread_ctx.stats.last_measure_time;
+      if (dur > one_sec) {
+        thread_ctx.stats.last_measure_time = now;
+        thread_ctx.stats.prev = thread_ctx.stats.current;
+      }
+      continue;
+    }
+
+    app_hdr_t *req_hdr =
+      reinterpret_cast<app_hdr_t *>(thread_ctx.tx_message.data());
+    req_hdr->window_slot = 0xc4a7;
+
+    const int ret = machnet_send(thread_ctx.channel_ctx, *thread_ctx.flow,
+        thread_ctx.tx_message.data(), FLAGS_msg_size);
+    if (ret == 0) {
+      stats_cur.tx_success++;
+      stats_cur.tx_bytes += FLAGS_msg_size;
+    } else {
+      LOG(WARNING) << "Client: Failed to send message for window slot ";
+      stats_cur.err_tx_drops++;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   ::google::InitGoogleLogging(argv[0]);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -350,7 +389,11 @@ int main(int argc, char *argv[]) {
     LOG(INFO) << "[CONNECTED] [" << FLAGS_local_ip << ":" << flow.src_port
               << " <-> " << FLAGS_remote_ip << ":" << flow.dst_port << "]";
 
-    datapath_thread = std::thread(ClientLoop, channel_ctx, &flow);
+    if (FLAGS_tx_only) {
+      datapath_thread = std::thread(ClientLoopCrazy, channel_ctx, &flow);
+    } else {
+      datapath_thread = std::thread(ClientLoop, channel_ctx, &flow);
+    }
   } else {
     int ret =
         machnet_listen(channel_ctx, FLAGS_local_ip.c_str(), FLAGS_local_port);
@@ -364,7 +407,7 @@ int main(int argc, char *argv[]) {
     datapath_thread = std::thread(ServerLoop, channel_ctx);
   }
 
-  while (g_keep_running) sleep(5);
+  /* while (g_keep_running) sleep(5); */
   datapath_thread.join();
   return 0;
 }
