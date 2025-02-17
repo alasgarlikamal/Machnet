@@ -32,6 +32,7 @@ DEFINE_uint64(msg_nr, UINT64_MAX, "Number of messages to send.");
 DEFINE_bool(verify, false, "Verify payload of received messages.");
 DEFINE_bool(tx_only, false, "Run in Tx only mode.");
 DEFINE_bool(rx_only, false, "Run server in Rx only mode.");
+DEFINE_uint32(tx_rate, 1000, "Rate of sending messages.");
 
 static volatile int g_keep_running = 1;
 
@@ -379,7 +380,7 @@ void ClientLoop(void *channel_ctx, MachnetFlow *flow) {
 void ClientLoopCrazy(void *channel_ctx, MachnetFlow *flow) {
   ThreadCtx thread_ctx(channel_ctx, flow);
   LOG(INFO) << "Crazy Client is In the Town!...";
-  const uint64_t rate = 14000; // pps
+  const uint64_t rate = FLAGS_tx_rate; // pps
   const auto one_sec = std::chrono::seconds(1); // one sec in ns
   auto &stats_cur = thread_ctx.stats.current;
   while (true) {

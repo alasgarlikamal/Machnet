@@ -548,11 +548,18 @@ int machnet_sendmsg(const void *channel_ctx, const MachnetMsgHdr_t *msghdr) {
   // them.
   const uint32_t buffers_nr =
       (msghdr->msg_size + kMsgBufPayloadMax - 1) / kMsgBufPayloadMax;
-  MachnetRingSlot_t *buf_index_table = _machnet_buffers_alloc(ctx, buffers_nr);
-  if (buf_index_table == NULL) {
-    // We failed to allocate the buffers.
-    return -1;
-  }
+  /*MachnetRingSlot_t *buf_index_table = _machnet_buffers_alloc(ctx, buffers_nr);*/
+  /*if (buf_index_table == NULL) {*/
+  /*  // We failed to allocate the buffers.*/
+  /*  return -ENOMEM;*/
+  /*}*/
+
+  /* Retry getting the memory */
+  MachnetRingSlot_t *buf_index_table = NULL;
+  do {
+      /* Try to allocate */
+      buf_index_table = _machnet_buffers_alloc(ctx, buffers_nr);
+  } while (buf_index_table == NULL);
 
   // Gather all message segments.
   uint32_t buffer_cur_index = 0;
@@ -617,9 +624,14 @@ int machnet_sendmsg(const void *channel_ctx, const MachnetMsgHdr_t *msghdr) {
 
   // Finally, send the message.
   // TODO(ilias): Add retries if the ring is full, and add statistics.
-  if (__machnet_channel_app_ring_enqueue(ctx, 1, buf_index_table) != 1) {
-    return -1;
-  }
+  /*if (__machnet_channel_app_ring_enqueue(ctx, 1, buf_index_table) != 1) {*/
+  /*  _machnet_buffers_release(ctx, buffers_nr, buf_index_table);*/
+  /*  return -EIO;*/
+  /*}*/
+
+  /* NOTE(farbod): if you decide to fail here (instead of retrying) remember to
+   * release the buffers */
+  while (__machnet_channel_app_ring_enqueue(ctx, 1, buf_index_table) != 1) {};
 
   return 0;
 }

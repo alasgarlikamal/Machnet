@@ -221,7 +221,7 @@ class RXTracking {
       VLOG(1) << "Failed to allocate a message buffer. Dropping packet.";
       return -1;
     }
-    
+
     const size_t payload_len =
         packet->length() - net_hdr_len - sizeof(MachnetPktHdr);
     auto* msg_data = msgbuf->append<uint8_t*>(payload_len);
@@ -538,6 +538,19 @@ class Flow {
                      << static_cast<int>(state_);
           return;
         }
+
+        /* NOTE(farbod): The following code (Consuming the Data packet) will
+         * Abort if (1) there is not enough memory for the buffer allocation
+         * and (2) not enough space on the channel ring. Let's just drop the
+         * packet if there is not enough space.
+         * */
+        if (!channel_->HasBuf(1) || !channel_->HasEmptySpaceOnRing(1)) {
+            // Not enough space on the channel. The machnet engine will release
+            // the mbufs to the driver
+            LOG(ERROR) << "Dropping packet because the flow's channel is full";
+            return;
+        }
+
         // Data packet, process the payload.
         const int consume_returncode = rx_tracking_.Consume(&pcb_, packet);
         if (consume_returncode == 0) SendAck();

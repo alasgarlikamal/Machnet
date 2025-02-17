@@ -369,6 +369,28 @@ class ShmChannel {
     return ret;
   }
 
+  /**
+   * @brief: report if the channel has `n` or more buffers.
+   * */
+  bool HasBuf(uint32_t n) {
+    if (n == 1 && cached_buf_count > 0)
+      return true;
+
+    jring_t *buf_ring = __machnet_channel_buf_ring(ctx_);
+    uint32_t free = jring_free_count(buf_ring);
+    if (free >= n)
+      return true;
+    return false;
+  }
+
+  bool HasEmptySpaceOnRing(uint32_t n) {
+    jring_t *machnet_ring = __machnet_channel_machnet_ring(ctx_);
+    uint32_t free = jring_free_count(machnet_ring);
+    if (free >= n)
+      return true;
+    return false;
+  }
+
  private:
   const std::string name_;
   const MachnetChannelCtx_t *ctx_;
