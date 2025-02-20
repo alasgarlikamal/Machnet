@@ -377,16 +377,16 @@ class ShmChannel {
       return true;
 
     jring_t *buf_ring = __machnet_channel_buf_ring(ctx_);
-    uint32_t free = jring_free_count(buf_ring);
-    if (free >= n)
+    uint32_t f = jring_count(buf_ring);
+    if (f >= n)
       return true;
     return false;
   }
 
   bool HasEmptySpaceOnRing(uint32_t n) {
     jring_t *machnet_ring = __machnet_channel_machnet_ring(ctx_);
-    uint32_t free = jring_free_count(machnet_ring);
-    if (free >= n)
+    uint32_t f = jring_free_count(machnet_ring);
+    if (f >= n)
       return true;
     return false;
   }
