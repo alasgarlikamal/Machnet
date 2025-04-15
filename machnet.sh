@@ -10,6 +10,7 @@ LOCAL_MAC=""
 LOCAL_IP=""
 BARE_METAL=0
 DEBUG=0
+THREADS=1
 while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
@@ -29,6 +30,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--debug)
             DEBUG=1
+            shift
+            ;;
+        -e|--engines)
+            THREADS="$2"
+            shift
             shift
             ;;
         *)
@@ -93,7 +99,7 @@ if [ ! -d "/var/run/machnet" ]; then
     sudo chmod 755 /var/run/machnet # Set permissions like Ubuntu's default, needed on (e.g.) CentOS
 fi
 
-sudo bash -c "echo '{\"machnet_config\": {\"$LOCAL_MAC\": {\"ip\": \"$LOCAL_IP\", \"engine_threads\": 2 } }}' > /var/run/machnet/local_config.json"
+sudo bash -c "echo '{\"machnet_config\": {\"$LOCAL_MAC\": {\"ip\": \"$LOCAL_IP\", \"engine_threads\": $THREADS } }}' > /var/run/machnet/local_config.json"
 echo "Created config for local Machnet, in /var/run/machnet/local_config.json. Contents:"
 sudo cat /var/run/machnet/local_config.json
 
