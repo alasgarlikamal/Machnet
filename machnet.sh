@@ -93,7 +93,7 @@ if [ ! -d "/var/run/machnet" ]; then
     sudo chmod 755 /var/run/machnet # Set permissions like Ubuntu's default, needed on (e.g.) CentOS
 fi
 
-sudo bash -c "echo '{\"machnet_config\": {\"$LOCAL_MAC\": {\"ip\": \"$LOCAL_IP\"}}}' > /var/run/machnet/local_config.json"
+sudo bash -c "echo '{\"machnet_config\": {\"$LOCAL_MAC\": {\"ip\": \"$LOCAL_IP\", \"engine_threads\": 2 } }}' > /var/run/machnet/local_config.json"
 echo "Created config for local Machnet, in /var/run/machnet/local_config.json. Contents:"
 sudo cat /var/run/machnet/local_config.json
 

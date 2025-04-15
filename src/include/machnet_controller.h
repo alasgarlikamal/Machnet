@@ -166,6 +166,7 @@ class MachnetController {
   std::unique_ptr<UDServer> server_{nullptr};
   std::unordered_map<std::string, std::unordered_set<std::string>>
       applications_registered_{};
+  uint64_t index_ = 0;
 };
 }  // namespace juggler
 
