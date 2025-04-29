@@ -6,3 +6,5 @@ debug_build/
 release_build/
 .history
 .vscode
+tags
+tags.*
