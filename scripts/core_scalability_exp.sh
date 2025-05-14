@@ -1,6 +1,6 @@
 #! /bin/bash
 
-set -x
+# set -x
 
 # Assumptions:
 #  - There are many hard coded values
@@ -12,17 +12,17 @@ outdir=$HOME/results/
 
 # ssh config
 ssh_user=farbod
-server=128.110.218.96
+server=138.37.32.108
 
 # server client addresses
 server_ip="10.10.0.1"
-server_mac="9c:dc:71:5c:ef:d1"
+server_mac="e8:eb:d3:a7:0c:b6"
 client_ip="10.10.0.2"
-client_mac="9c:dc:71:5d:51:71"
+client_mac="b8:ce:f6:d2:12:c6"
 
 # install dir
 curdir=$(dirname $0)
-machnet_install_dir="/users/farbod/dev/machnet"
+machnet_install_dir="/home/farbod/machnet"
 msg_gen=$machnet_install_dir/build/src/apps/msg_gen/msg_gen
 machnet_sh=$machnet_install_dir/machnet.sh
 
@@ -31,7 +31,7 @@ count_threads=1 # will be changed in the main
 base_port=900
 msg_size=64
 msg_window=1024
-exp_duration=15
+exp_duration=25
 
 stop_everthing() {
 	sudo pkill -INT msg_gen
@@ -53,15 +53,17 @@ trap 'on_signal' SIGINT SIGHUP
 one_round() {
 	stop_everthing
 
+	# NOTE: server's nic is on numa node 1, allocate cpu from odd cores
 	# setup servers
-	ssh $ssh_user@$server << EOF
+	ssh $ssh_user@$server > /dev/null << EOF
 		cd $machnet_install_dir
 		(nohup bash ./machnet.sh -b --mac $server_mac --ip $server_ip -e $count_threads &> /tmp/machnet_stdout.txt) &
 		sleep 5
 		base_port=$base_port
 		for i in \$(seq $count_threads); do
 			port=\$((base_port + i))
-			(nohup $msg_gen --local_ip $server_ip --local_port \$port &> /tmp/msg_gen_\$i.txt) &
+			tmp_core=\$((11 + \$i * 2))
+			(nohup taskset -c \$tmp_core $msg_gen --local_ip $server_ip --local_port \$port &> /tmp/msg_gen_\$i.txt) &
 			sleep 1
 		done
 EOF
@@ -72,9 +74,11 @@ EOF
 	cd $machnet_install_dir
 	(nohup bash ./machnet.sh -b --mac $client_mac --ip $client_ip -e $count_threads &> /tmp/machnet_stdout.txt) &
 	sleep 5
+	# client's NIC is on numa node 0 allocate from even cores
 	for i in $(seq $count_threads); do
 		port=$((base_port + i))
-		(nohup $msg_gen --local_ip $client_ip --local_port $port \
+		tmp_core=$((10 + $i * 2))
+		(nohup taskset -c $tmp_core $msg_gen --local_ip $client_ip --local_port $port \
 			--remote_ip $server_ip --remote_port $port \
 			--msg_window $msg_window --msg_size $msg_size &> /tmp/msg_gen_$i.txt) &
 		done
@@ -86,7 +90,9 @@ EOF
 }
 
 main() {
-	for i in 1 2 3 4; do
+	list=( 1 2 3 4 5 )
+	# list=( 5 )
+	for i in ${list[@]}; do
 		echo number of engines: $i
 		count_threads=$i
 		one_round
