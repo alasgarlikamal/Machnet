@@ -44,6 +44,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Farbod: it is important for experiments
+echo ""
+echo "This script is using an odd number CPU mask, if your NIC is on even cores, change it to 0x155"
+echo ""
+
 # Pre-flight checks
 if [ -z "$LOCAL_MAC" ] || [ -z "$LOCAL_IP" ]; then
     echo "Usage: machnet.sh --mac <local MAC> --ip <local IP>"
@@ -99,7 +104,7 @@ if [ ! -d "/var/run/machnet" ]; then
     sudo chmod 755 /var/run/machnet # Set permissions like Ubuntu's default, needed on (e.g.) CentOS
 fi
 
-sudo bash -c "echo '{\"machnet_config\": {\"$LOCAL_MAC\": {\"ip\": \"$LOCAL_IP\", \"engine_threads\": $THREADS } }}' > /var/run/machnet/local_config.json"
+sudo bash -c "echo '{\"machnet_config\": {\"$LOCAL_MAC\": {\"ip\": \"$LOCAL_IP\", \"engine_threads\": $THREADS, \"cpu_mask\": \"0x2aa\" } }}' > /var/run/machnet/local_config.json"
 echo "Created config for local Machnet, in /var/run/machnet/local_config.json. Contents:"
 sudo cat /var/run/machnet/local_config.json
 
