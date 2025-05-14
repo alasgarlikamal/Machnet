@@ -78,10 +78,28 @@ EOF
 	for i in $(seq $count_threads); do
 		port=$((base_port + i))
 		tmp_core=$((10 + $i * 2))
-		(nohup taskset -c $tmp_core $msg_gen --local_ip $client_ip --local_port $port \
-			--remote_ip $server_ip --remote_port $port \
-			--msg_window $msg_window --msg_size $msg_size &> /tmp/msg_gen_$i.txt) &
+		# Make sure the connection is open, otherwise retry
+		while true; do
+			(nohup taskset -c $tmp_core $msg_gen --local_ip $client_ip --local_port $port \
+				--remote_ip $server_ip --remote_port $port \
+				--msg_window $msg_window --msg_size $msg_size &> /tmp/msg_gen_$i.txt) &
+			pid=$!
+			sleep 8
+			grep "TX/RX" /tmp/msg_gen_$i.txt > /dev/null
+			t1=$?
+			grep "ERROR" /tmp/msg_gen_$i.txt > /dev/null
+			t2=$?
+			# if [ -d "/proc/$pid" ]; then
+			# 	break
+			# fi
+			if [ $t1 -eq 0 -a $t2 -ne 0 ]; then
+				# connected
+				break
+			fi
+			kill -SIGINT $pid
+			echo "Failed to connect: PID:$pid"
 		done
+	done
 
 	# experiment duration
 	sleep $exp_duration

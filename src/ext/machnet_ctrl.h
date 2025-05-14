@@ -34,9 +34,9 @@ typedef struct machnet_app_info machnet_app_info_t;
  */
 struct machnet_channel_info {
   uuid_t channel_uuid;
-#define MACHNET_CHANNEL_INFO_DESC_RING_SIZE_DEFAULT 8192
+#define MACHNET_CHANNEL_INFO_DESC_RING_SIZE_DEFAULT (8192 * 2)
   uint32_t desc_ring_size;
-#define MACHNET_CHANNEL_INFO_BUFFER_COUNT_DEFAULT 8192
+#define MACHNET_CHANNEL_INFO_BUFFER_COUNT_DEFAULT (8192 * 2)
   uint32_t buffer_count;
 } __attribute__((packed));
 typedef struct machnet_channel_info machnet_channel_info_t;
