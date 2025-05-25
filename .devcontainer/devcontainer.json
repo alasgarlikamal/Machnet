@@ -1,0 +1,52 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
+{
+	"name": "Machnet Devcontainer",
+	"build": {
+		// Sets the run context to one level up instead of the .devcontainer folder.
+		"context": "..",
+		"dockerfile": "../dockerfiles/devenv.dockerfile",
+		"target": "machnet_dev"
+	},
+	// Remove the container after detaching from it
+	"runArgs": ["--rm"],
+	// Set the workspace folder inside the container
+	"workspaceFolder": "/home/vj2267/machnet",
+	// Mount the workspace folder using standard devcontainer path
+	"mounts": [
+		"source=${localWorkspaceFolder},target=/home/vj2267/machnet,type=bind"
+	],
+	// Features to add to the dev container for enhanced functionality
+	"features": {
+		// Common utilities with automatic user setup
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"installZsh": true,
+			"installOhMyZsh": true,
+			"upgradePackages": false,
+			"username": "vj2267",
+			"uid": "20002",
+			"gid": "3988"
+		}
+	},
+	// Configure tool-specific properties
+	// "customizations": {
+	// 	"vscode": {
+	// 		// Extensions that provide useful functionality for C++ development
+	// 		// "extensions": [
+	// 		// 	"ms-vscode.cpptools",
+	// 		// 	"ms-vscode.cmake-tools",
+	// 		// 	"ms-vscode.hexeditor"
+	// 		// ],
+	// 		// "settings": {
+	// 			// Configure git to handle the container environment properly
+	// 			"git.allowUnsafeProtocol": true,
+	// 			"git.autoRefresh": true
+	// 		}
+	// 	}
+	// },
+
+	// Build the project after container creation and source mount
+	// "postCreateCommand": "./build.sh",
+	// Set the remote user to the user running the container
+	"remoteUser": "vj2267"
+}
