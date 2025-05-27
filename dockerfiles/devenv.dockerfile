@@ -15,6 +15,7 @@ RUN ln -snf /usr/share/zoneinfo/${timezone} /etc/localtime && \
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
         git \
+        curl \ 
         clangd clang-format clang-tidy \
         build-essential cmake meson pkg-config libudev-dev \
         libnl-3-dev libnl-route-3-dev python3-dev \
@@ -23,6 +24,12 @@ RUN apt-get update && \
         libhugetlbfs-dev pciutils libunwind-dev uuid-dev nlohmann-json3-dev \
         sudo vim && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Rust and development tools
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    . $HOME/.cargo/env && \
+    rustup component add rustfmt clippy rust-analyzer && \
+    cargo install cargo-watch cargo-edit cargo-expand
 
 # Create user and add to sudo group
 RUN useradd -m -s /bin/bash vj2267 && \
