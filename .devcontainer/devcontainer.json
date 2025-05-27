@@ -9,12 +9,18 @@
 		"target": "machnet_dev"
 	},
 	// Remove the container after detaching from it
-	"runArgs": ["--rm"],
+	"runArgs": [
+		"--privileged",
+		"--net=host",
+		"--rm"
+	],
 	// Set the workspace folder inside the container
 	"workspaceFolder": "/home/vj2267/machnet",
 	// Mount the workspace folder using standard devcontainer path
 	"mounts": [
-		"source=${localWorkspaceFolder},target=/home/vj2267/machnet,type=bind"
+		"source=${localWorkspaceFolder},target=/home/vj2267/machnet,type=bind",
+		"source=/sys/bus/pci/drivers,target=/sys/bus/pci/drivers,type=bind",
+		"source=/dev/hugepages,target=/dev/hugepages,type=bind"
 	],
 	// Features to add to the dev container for enhanced functionality
 	"features": {
@@ -29,24 +35,17 @@
 		}
 	},
 	// Configure tool-specific properties
-	// "customizations": {
-	// 	"vscode": {
-	// 		// Extensions that provide useful functionality for C++ development
-	// 		// "extensions": [
-	// 		// 	"ms-vscode.cpptools",
-	// 		// 	"ms-vscode.cmake-tools",
-	// 		// 	"ms-vscode.hexeditor"
-	// 		// ],
-	// 		// "settings": {
-	// 			// Configure git to handle the container environment properly
-	// 			"git.allowUnsafeProtocol": true,
-	// 			"git.autoRefresh": true
-	// 		}
-	// 	}
-	// },
-
+	"customizations": {
+		"vscode": {
+			// Extensions that provide useful functionality for C++ development
+			"extensions": [
+				// llvm-vs-code-extensions.clangd,
+				"llvm-vs-code-extensions.vscode-clangd"
+			]
+		}
+	},
 	// Build the project after container creation and source mount
-	// "postCreateCommand": "./build.sh",
+	"postCreateCommand": "scripts/build.sh",
 	// Set the remote user to the user running the container
 	"remoteUser": "vj2267"
 }

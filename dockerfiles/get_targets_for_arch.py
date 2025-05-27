@@ -31,6 +31,8 @@ def main():
         machine = str(platform.machine()).lower()
         if machine == "amd64":
             arch = "linux/amd64"
+        elif machine == "x86_64":
+            arch = "linux/amd64"
         elif machine == "aarch64":
             arch = "linux/arm64"
         else:
