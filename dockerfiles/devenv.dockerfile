@@ -25,15 +25,26 @@ RUN apt-get update && \
         sudo vim && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Rust and development tools
+# Create user and add to sudo group
+RUN useradd -m -s /bin/bash vj2267 && \
+    echo "vj2267 ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Switch to vj2267 user for Rust installation
+USER vj2267
+WORKDIR /home/vj2267
+
+# Install Rust and development tools for vj2267
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     . $HOME/.cargo/env && \
     rustup component add rustfmt clippy rust-analyzer && \
     cargo install cargo-watch cargo-edit cargo-expand
 
-# Create user and add to sudo group
-RUN useradd -m -s /bin/bash vj2267 && \
-    echo "vj2267 ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+# Add cargo to PATH in .bashrc
+RUN echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $HOME/.bashrc && \
+    echo 'source "$HOME/.cargo/env"' >> $HOME/.bashrc
+
+# Switch back to root for system-level operations
+USER root
 
 # Remove conflicting packages
 RUN apt-get update && \
@@ -70,15 +81,14 @@ ENV RTE_SDK /home/vj2267/dpdk
 ENV DPDK_DISABLED_APPS dumpcap,graph,pdump,proc-info,test-acl,test-bbdev,test-cmdline,test-compress-perf,test-crypto-perf,test-dma-perf,test-eventdev,test-fib,test-flow-perf,test-gpudev,test-mldev,test-pipeline,test-regex,test-sad,test-security-perf
 ENV DPDK_DISABLED_DRIVER_GROUPS raw/*,crypto/*,baseband/*,dma/*,event/*,regex/*,ml/*,gpu/*,vdpa/*,compress/*
 ENV DPDK_DISABLED_COMMON_DRIVERS common/qat,common/octeontx,common/octeontx2,common/cnxk,common/dpaax
-
 # probably the only safe bus driver to disable
 ENV DPDK_DISABLED_BUS_DRIVERS bus/ifpga
-
 # PMDs which don't meet the minimum requirements for Machnet
 ENV DPDK_DISABLED_NIC_DRIVERS net/softnic,net/tap,net/af_packet,net/af_xdp,net/avp,net/bnx2x,net/memif,net/nfb,net/octeon_ep,net/pcap,net/ring,net/tap
 
 # Additional drivers to disable. Intended to allow disabling drivers not needed in your environment to save on image size. This needs to end with a comma.
 ARG DPDK_ADDITIONAL_DISABLED_DRIVERS
+
 ENV DPDK_DISABLED_DRIVERS ${DPDK_ADDITIONAL_DISABLED_DRIVERS}${DPDK_DISABLED_DRIVER_GROUPS},${DPDK_DISABLED_COMMON_DRIVERS},${DPDK_DISABLED_BUS_DRIVERS},${DPDK_DISABLED_NIC_DRIVERS}
 
 # Enabling a driver wins over disabling a driver, so if you the user disagree with any of our decisions add a comma delimited list of drivers to re-enable.
@@ -109,6 +119,5 @@ RUN chown -R vj2267:vj2267 /home/vj2267
 
 # Switch to vj2267 user
 USER vj2267
-
 WORKDIR /home/vj2267/machnet
 ENTRYPOINT ["/bin/bash"]
