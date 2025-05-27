@@ -1,4 +1,4 @@
-# Stage 1: Install system packages and build dependencies
+# Stage 1: Base system packages and build dependencies
 FROM ubuntu:22.04 AS machnet_build_base
 
 # Fixes QEMU-based builds so they don't emulate an x86-64-v1 CPU
@@ -21,20 +21,23 @@ RUN apt-get update && \
         python3-docutils python3-pyelftools libnuma-dev \
         ca-certificates autoconf \
         libhugetlbfs-dev pciutils libunwind-dev uuid-dev nlohmann-json3-dev \
-        sudo vim
+        sudo vim && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create user and add to sudo group
 RUN useradd -m -s /bin/bash vj2267 && \
     echo "vj2267 ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
- # Remove conflicting packages
-RUN apt-get --purge -y remove rdma-core librdmacm1 ibverbs-providers libibverbs-dev libibverbs1
-
-# Cleanup after package install
-RUN rm -rf /var/lib/apt/lists/*
+# Remove conflicting packages
+RUN apt-get update && \
+    apt-get --purge -y remove rdma-core librdmacm1 ibverbs-providers libibverbs-dev libibverbs1 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /home/vj2267
+
+# Stage 2: RDMA Core build
+FROM machnet_build_base AS rdma_core_build
 
 # Set env variable for rdma-core
 ENV RDMA_CORE /home/vj2267/rdma-core
@@ -49,6 +52,9 @@ RUN git clone -b 'stable-v52' --single-branch --depth 1 https://github.com/linux
 
 # ldconfig to update the dynamic linker run-time bindings
 RUN echo /usr/local/lib64 > /etc/ld.so.conf.d/usr_local.conf && ldconfig
+
+# Stage 3: DPDK build
+FROM rdma_core_build AS dpdk_build
 
 # Set env variable for DPDK
 ENV RTE_SDK /home/vj2267/dpdk
@@ -82,19 +88,20 @@ ARG DPDK_EXTRA_MESON_DEFINES
 ARG DPDK_MESON_BUILD_PRESET=debugoptimized
 
 # Build DPDK
-RUN git clone --depth 1 --branch 'v23.11' https://github.com/DPDK/dpdk.git ${RTE_SDK}
-RUN cd ${RTE_SDK} && \
-meson setup build --buildtype=${DPDK_MESON_BUILD_PRESET} -Dexamples='' -Dplatform=${DPDK_PLATFORM} -Denable_kmods=false -Dtests=false -Ddisable_apps=${DPDK_DISABLED_APPS} -Ddisable_drivers=${DPDK_DISABLED_DRIVERS} -Denable_drivers='${DPDK_ENABLED_DRIVERS}' ${DPDK_EXTRA_MESON_DEFINES} && \
+RUN git clone --depth 1 --branch 'v23.11' https://github.com/DPDK/dpdk.git ${RTE_SDK} && \
+    cd ${RTE_SDK} && \
+    meson setup build --buildtype=${DPDK_MESON_BUILD_PRESET} -Dexamples='' -Dplatform=${DPDK_PLATFORM} -Denable_kmods=false -Dtests=false -Ddisable_apps=${DPDK_DISABLED_APPS} -Ddisable_drivers=${DPDK_DISABLED_DRIVERS} -Denable_drivers='${DPDK_ENABLED_DRIVERS}' ${DPDK_EXTRA_MESON_DEFINES} && \
     ninja -C build install && \
-    cd / 
+    cd /
+
+# Stage 4: Development environment (for devcontainer use)
+FROM dpdk_build AS machnet_dev
 
 # Set ownership of all files to vj2267
 RUN chown -R vj2267:vj2267 /home/vj2267
 
 # Switch to vj2267 user
 USER vj2267
-    
-# Stage 2: Development environment (for devcontainer use)
-FROM machnet_build_base AS machnet_dev
+
 WORKDIR /home/vj2267/machnet
 ENTRYPOINT ["/bin/bash"]
