@@ -21,6 +21,7 @@ SRC_FILES=$(shell find $(SRC_DIRS) -type f -name "*.c" -o -name "*.cpp" -o -name
 # Build artifacts
 DEBUG_BINARY=$(DEBUG_BUILD_DIR)/src/apps/machnet/machnet
 RELEASE_BINARY=$(RELEASE_BUILD_DIR)/src/apps/machnet/machnet
+MSG_GEN_BINARY=$(RELEASE_BUILD_DIR)/src/apps/msg_gen/msg_gen
 
 # Hugepage settings
 HUGEPAGE_SIZE=2048
@@ -30,7 +31,11 @@ HUGEPAGE_PATH=/sys/devices/system/node/node*/hugepages/hugepages-$(HUGEPAGE_SIZE
 # Config file
 CONFIG_FILE?=src/apps/machnet/config.json
 
-.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages
+# Default IPs for msg_gen
+SERVER_IP?=10.10.1.1
+CLIENT_IP?=10.10.1.2
+
+.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp
 
 # Users likely want to get containers that work on the current system,
 # so that is the default.
@@ -84,6 +89,16 @@ setup_hugepages:
 run_machnet: setup_hugepages $(RELEASE_BINARY)
 	@echo "Starting Machnet with config: $(CONFIG_FILE)..."
 	sudo GLOG_logtostderr=1 $(RELEASE_BINARY) -config_json $(CONFIG_FILE)
+
+# Run msg_gen server
+run_msg_gen_server_cpp: setup_hugepages $(RELEASE_BINARY)
+	@echo "Starting msg_gen server on IP: $(SERVER_IP)..."
+	sudo GLOG_logtostderr=1 $(MSG_GEN_BINARY) --local_ip $(SERVER_IP)
+
+# Run msg_gen client
+run_msg_gen_client_cpp: setup_hugepages $(RELEASE_BINARY)
+	@echo "Starting msg_gen client on IP: $(CLIENT_IP) connecting to server: $(SERVER_IP)..."
+	sudo GLOG_logtostderr=1 $(MSG_GEN_BINARY) --local_ip $(CLIENT_IP) --remote_ip $(SERVER_IP)
 
 clean:
 	rm -rf $(DEBUG_BUILD_DIR) $(RELEASE_BUILD_DIR)
