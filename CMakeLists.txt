@@ -6,13 +6,14 @@ include(CTest)
 set(BUILD_TESTING OFF) # Disable testing for third-party modules
 # SET(CMAKE_FIND_LIBRARY_SUFFIXES .a .so ${CMAKE_FIND_LIBRARY_SUFFIXES})
 
-# SET(BUILD_STATIC_LIBS ON)
-SET(BUILD_gflags_nothreads_LIBS ON)
-SET(BUILD_gflags_LIBS ON)
-add_subdirectory(third_party/gflags)
-include_directories(SYSTEM "${CMAKE_CURRENT_BINARY_DIR}/third_party/gflags/include/")
-
-find_package(gflags)
+find_package(gflags QUIET)
+if (NOT gflags_FOUND)
+    # SET(BUILD_STATIC_LIBS ON)
+    SET(BUILD_gflags_nothreads_LIBS ON)
+    SET(BUILD_gflags_LIBS ON)
+    add_subdirectory(third_party/gflags)
+    include_directories(SYSTEM "${CMAKE_CURRENT_BINARY_DIR}/third_party/gflags/include/")
+endif()
 
 # Glog doesn't correctly define its include directories, so we need to specify
 # manually
