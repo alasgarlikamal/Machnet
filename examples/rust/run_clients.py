@@ -8,9 +8,10 @@ from datetime import datetime
 import re
 import argparse
 import sys
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import numpy as np
 import signal
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run client instances for channel scalability experiment')
@@ -62,7 +63,7 @@ def parse_client_output(output: str) -> Dict:
         'rtt_p999_us': float(rtt_p999)
     }
 
-def run_client(client_id: int, args) -> Dict:
+def run_client(client_id: int, args) -> Tuple[int, Dict]:
     port = 1000 + client_id
     cmd = [
         args.binary,
@@ -78,28 +79,47 @@ def run_client(client_id: int, args) -> Dict:
     if args.verify:
         cmd.append('--verify')
     
-    print(f"Running client {client_id + 1}/{args.num_channels} for {args.duration} seconds...")
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print(f"Starting client {client_id + 1}/{args.num_channels}...")
     
     try:
-        # Wait for the specified duration
-        time.sleep(args.duration)
-        # Send SIGINT to gracefully stop the client
-        process.send_signal(signal.SIGINT)
-        # Give it a moment to clean up
-        time.sleep(1)
-        # If still running, force kill
-        if process.poll() is None:
-            process.kill()
+        # Start the process
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,  # Line buffered
+            universal_newlines=True
+        )
         
+        # Wait for the specified duration
+        try:
+            process.wait(timeout=args.duration)
+        except subprocess.TimeoutExpired:
+            # Send SIGINT for graceful shutdown
+            process.send_signal(signal.SIGINT)
+            try:
+                # Give it a moment to clean up
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                # Force kill if still running
+                process.kill()
+                process.wait()
+        
+        # Get the output
         stdout, stderr = process.communicate()
         
-        if process.returncode != 0 and process.returncode != -2:  # -2 is SIGINT
+        # Combine stdout and stderr since the client logs to stderr
+        combined_output = stdout + stderr
+        
+        if process.returncode != 0 and process.returncode != -2 and process.returncode != -9:  # -2 is SIGINT and -9 is SIGKILL
             raise RuntimeError(f"Client {client_id} failed with error: {stderr}")
         
-        return parse_client_output(stdout)
+        return client_id, parse_client_output(combined_output)
+        
     except Exception as e:
-        process.kill()
+        # Ensure we capture output even if an exception occurs
+        stdout, stderr = process.communicate() if 'process' in locals() else ('', '')
         raise e
 
 def write_csv(data: Dict, filename: str):
@@ -112,21 +132,30 @@ def main():
     args = parse_args()
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
-    # Run clients and collect data
+    # Run clients in parallel using ThreadPoolExecutor
     all_data = []
-    for i in range(args.num_channels):
-        try:
-            data = run_client(i, args)
-            all_data.append(data)
-            
-            # Write individual client data
-            filename = f"client_{timestamp}_{i+1}.csv"
-            write_csv(data, filename)
-            print(f"Wrote data to {filename}")
-            
-        except Exception as e:
-            print(f"Error running client {i+1}: {e}")
-            continue
+    with ThreadPoolExecutor(max_workers=args.num_channels) as executor:
+        # Submit all client tasks
+        future_to_client = {
+            executor.submit(run_client, i, args): i 
+            for i in range(args.num_channels)
+        }
+        
+        # Process results as they complete
+        for future in as_completed(future_to_client):
+            client_id = future_to_client[future]
+            try:
+                _, data = future.result()
+                print(f"Client {client_id + 1} completed successfully")
+                all_data.append(data)
+                
+                # Write individual client data
+                filename = f"client_{timestamp}_{client_id + 1}.csv"
+                write_csv(data, filename)
+                print(f"Wrote data to {filename}")
+                
+            except Exception as e:
+                print(f"Client {client_id + 1} failed: {e}")
     
     if not all_data:
         print("No successful client runs!")
