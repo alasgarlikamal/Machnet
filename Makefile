@@ -1,14 +1,16 @@
-# This makefile is primarily used for building docker containers
+# Machnet Makefile
+# This makefile is used for building Machnet and its components, including Docker containers and the shim library
 
 SHELL=/bin/bash -e -o pipefail
 
-# Shim library settings
+# Shim library configuration
 SHIM_SRC_DIR=src/ext
 SHIM_LIB=libmachnet_shim.so
 SHIM_INSTALL_DIR?=/usr/lib
 SHIM_DEPS=libgflags-dev
 SHIM_SRC_FILES=$(shell find $(SHIM_SRC_DIR) -type f -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" -o -name "Makefile")
 
+# Docker build configuration
 BUILD_COMMAND=docker buildx bake -f docker-bake.hcl
 GET_BUILDX_INFO_COMMAND=$(BUILD_COMMAND) --print
 BUILD_TARGETS_COMMAND=xargs $(BUILD_COMMAND)
@@ -17,32 +19,59 @@ GET_TARGETS_FOR_ARCH_CMD=python3 $(CURDIR)/dockerfiles/get_targets_for_arch.py
 # By default, load into the local docker registry, can be overriden with --push for production builds
 BUILD_COMMAND_EXTRA_ARGS=--load
 
-# Build directories
+# Build directories for different build types
 DEBUG_BUILD_DIR=debug_build
 RELEASE_BUILD_DIR=release_build
 
-# Source directories to track
+# Source directories to track for changes
 SRC_DIRS=src dockerfiles examples
 SRC_FILES=$(shell find $(SRC_DIRS) -type f -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" -o -name "CMakeLists.txt" -o -name "*.cmake")
 
-# Build artifacts
+# Build artifacts paths
 DEBUG_BINARY=$(DEBUG_BUILD_DIR)/src/apps/machnet/machnet
 RELEASE_BINARY=$(RELEASE_BUILD_DIR)/src/apps/machnet/machnet
 MSG_GEN_BINARY=$(RELEASE_BUILD_DIR)/src/apps/msg_gen/msg_gen
 
-# Hugepage settings
+# Hugepage configuration
 HUGEPAGE_SIZE=2048
 HUGEPAGE_COUNT=1024
 HUGEPAGE_PATH=/sys/devices/system/node/node*/hugepages/hugepages-$(HUGEPAGE_SIZE)kB/nr_hugepages
 
-# Config file
+# Configuration file path
 CONFIG_FILE?=src/apps/machnet/config.json
 
 # Default IPs for msg_gen
 SERVER_IP?=10.10.1.1
 CLIENT_IP?=10.10.1.2
 
-.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp shim check_shim_deps build_shim
+# Define all phony targets
+.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp shim check_shim_deps build_shim help
+
+# Default target is help
+.DEFAULT_GOAL := help
+
+# Help target to display available targets and their descriptions
+help:
+	@echo "Available targets:"
+	@echo "  help                    - Display this help message"
+	@echo "  all_containers          - Build all container variants"
+	@echo "  x86_containers          - Build containers for x86 architecture"
+	@echo "  arm_containers          - Build containers for ARM architecture"
+	@echo "  native_containers       - Build containers for the current system architecture"
+	@echo "  debug                   - Build Machnet in debug mode"
+	@echo "  release                 - Build Machnet in release mode"
+	@echo "  clean                   - Remove all build artifacts"
+	@echo "  setup_hugepages         - Configure system hugepages"
+	@echo "  run_machnet             - Run Machnet with the specified config"
+	@echo "  run_msg_gen_server_cpp  - Run msg_gen server"
+	@echo "  run_msg_gen_client_cpp  - Run msg_gen client"
+	@echo "  shim                    - Build and install the Machnet shim library (requires sudo)"
+	@echo ""
+	@echo "Variables that can be overridden:"
+	@echo "  SHIM_INSTALL_DIR        - Directory to install shim library (default: /usr/lib)"
+	@echo "  CONFIG_FILE             - Path to Machnet config file"
+	@echo "  SERVER_IP               - IP address for msg_gen server"
+	@echo "  CLIENT_IP               - IP address for msg_gen client"
 
 # Users likely want to get containers that work on the current system,
 # so that is the default.
