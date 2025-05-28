@@ -2,6 +2,13 @@
 
 SHELL=/bin/bash -e -o pipefail
 
+# Shim library settings
+SHIM_SRC_DIR=src/ext
+SHIM_LIB=libmachnet_shim.so
+SHIM_INSTALL_DIR?=/usr/lib
+SHIM_DEPS=libgflags-dev
+SHIM_SRC_FILES=$(shell find $(SHIM_SRC_DIR) -type f -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" -o -name "Makefile")
+
 BUILD_COMMAND=docker buildx bake -f docker-bake.hcl
 GET_BUILDX_INFO_COMMAND=$(BUILD_COMMAND) --print
 BUILD_TARGETS_COMMAND=xargs $(BUILD_COMMAND)
@@ -35,7 +42,7 @@ CONFIG_FILE?=src/apps/machnet/config.json
 SERVER_IP?=10.10.1.1
 CLIENT_IP?=10.10.1.2
 
-.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp
+.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp shim check_shim_deps build_shim
 
 # Users likely want to get containers that work on the current system,
 # so that is the default.
@@ -100,5 +107,40 @@ run_msg_gen_client_cpp: setup_hugepages $(RELEASE_BINARY)
 	@echo "Starting msg_gen client on IP: $(CLIENT_IP) connecting to server: $(SERVER_IP)..."
 	sudo GLOG_logtostderr=1 $(MSG_GEN_BINARY) --local_ip $(CLIENT_IP) --remote_ip $(SERVER_IP)
 
-clean:
+# Shim library targets
+check_shim_deps:
+	@echo "Checking shim dependencies..."
+	@for dep in $(SHIM_DEPS); do \
+		if ! dpkg -l | grep -q "^ii  $$dep "; then \
+			echo "Installing $$dep..."; \
+			sudo apt-get update -y && sudo apt-get install -y $$dep; \
+		fi \
+	done
+
+build_shim: check_shim_deps
+	@echo "Building Machnet shim library..."
+	cd $(SHIM_SRC_DIR) && make clean && make
+	@if [ ! -f "$(SHIM_SRC_DIR)/$(SHIM_LIB)" ]; then \
+		echo "Error: Building Machnet shim library failed. Please check the build process."; \
+		exit 1; \
+	fi
+	cp $(SHIM_SRC_DIR)/$(SHIM_LIB) $(CURDIR)/
+	@echo "Installing Machnet shim library to $(SHIM_INSTALL_DIR)..."
+	@if [ ! -w "$(SHIM_INSTALL_DIR)" ]; then \
+		echo "Error: No write permission to $(SHIM_INSTALL_DIR). Please run with sudo."; \
+		exit 1; \
+	fi
+	cp $(CURDIR)/$(SHIM_LIB) $(SHIM_INSTALL_DIR)/
+	ldconfig
+	@echo "Machnet shim library installed successfully."
+
+shim: build_shim
+
+clean: clean_shim
 	rm -rf $(DEBUG_BUILD_DIR) $(RELEASE_BUILD_DIR)
+
+clean_shim:
+	@if [ -d "$(SHIM_SRC_DIR)" ]; then \
+		cd $(SHIM_SRC_DIR) && make clean; \
+	fi
+	rm -f $(CURDIR)/$(SHIM_LIB)
