@@ -12,7 +12,6 @@ RELEASE_BINARY = target/release/$(BINARY_NAME)
 SRC_DIR = src
 SRC_FILES = $(shell find $(SRC_DIR) -name '*.rs')
 CARGO_TOML = Cargo.toml
-CARGO_LOCK = Cargo.lock
 
 # Default parameters
 LOCAL_IP ?= 10.10.1.1
@@ -42,11 +41,11 @@ all: build
 build: $(BINARY)
 
 # Binary targets with dependencies
-$(DEBUG_BINARY): $(SRC_FILES) $(CARGO_TOML) $(CARGO_LOCK)
+$(DEBUG_BINARY): $(SRC_FILES) $(CARGO_TOML)
 	$(CARGO) build
 	@echo "Debug build completed: $@"
 
-$(RELEASE_BINARY): $(SRC_FILES) $(CARGO_TOML) $(CARGO_LOCK)
+$(RELEASE_BINARY): $(SRC_FILES) $(CARGO_TOML)
 	$(CARGO) build --release
 	@echo "Release build completed: $@"
 
