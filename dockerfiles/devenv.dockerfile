@@ -22,7 +22,7 @@ RUN apt-get update && \
         python3-docutils python3-pyelftools libnuma-dev \
         ca-certificates autoconf \
         libhugetlbfs-dev pciutils libunwind-dev uuid-dev nlohmann-json3-dev \
-        sudo vim && \
+        sudo vim libgflags-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Create user and add to sudo group
