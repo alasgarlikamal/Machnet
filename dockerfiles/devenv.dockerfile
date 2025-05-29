@@ -22,7 +22,7 @@ RUN apt-get update && \
         python3-docutils python3-pyelftools libnuma-dev \
         ca-certificates autoconf \
         libhugetlbfs-dev pciutils libunwind-dev uuid-dev nlohmann-json3-dev \
-        sudo vim libgflags-dev build-essential && \
+        sudo vim libgflags-dev build-essential wget lsb-release software-properties-common gnupg && \
     rm -rf /var/lib/apt/lists/*
 
 # Create user and add to sudo group
@@ -37,7 +37,7 @@ WORKDIR /home/vj2267
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     . $HOME/.cargo/env && \
     rustup component add rustfmt clippy rust-analyzer && \
-    rustup target add x86_64_unknown_none && \
+    rustup target add x86_64-unknown-none && \
     cargo install cargo-watch cargo-edit cargo-expand just
 
 # Add cargo to PATH in .bashrc

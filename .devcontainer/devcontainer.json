@@ -20,7 +20,8 @@
 	"mounts": [
 		"source=${localWorkspaceFolder},target=/home/vj2267/machnet,type=bind",
 		"source=/sys/bus/pci/drivers,target=/sys/bus/pci/drivers,type=bind",
-		"source=/dev/hugepages,target=/dev/hugepages,type=bind"
+		"source=/dev/hugepages,target=/dev/hugepages,type=bind",
+		"source=/dev/kvm,target=/dev/kvm,type=bind"
 	],
 	// Features to add to the dev container for enhanced functionality
 	"features": {
