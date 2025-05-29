@@ -30,7 +30,7 @@ static const std::size_t kPageSize = 4096;
 
 static const std::size_t kHugePage2MSize = 2 * 1024 * 1024;
 
-static constexpr bool kShmZeroCopyEnabled = false;
+static constexpr bool kShmZeroCopyEnabled = true;
 
 enum class CopyMode {
   kMemCopy,

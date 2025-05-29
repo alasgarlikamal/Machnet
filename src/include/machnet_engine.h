@@ -5,6 +5,9 @@
 #ifndef SRC_INCLUDE_MACHNET_ENGINE_H_
 #define SRC_INCLUDE_MACHNET_ENGINE_H_
 
+#include <utility>
+#include <optional>
+
 #include <arp.h>
 #include <channel.h>
 #include <common.h>
@@ -876,7 +879,7 @@ class MachnetEngine {
     const auto *machneth = pkt->head_data<MachnetPktHdr *>(
         sizeof(Ethernet) + sizeof(Ipv4) + sizeof(Udp));
 
-    const net::flow::Key pkt_key(ipv4h->dst_addr, machneth->dst_port,
+    net::flow::Key pkt_key(ipv4h->dst_addr, machneth->dst_port,
                                  ipv4h->src_addr, machneth->src_port);
     // Check ivp4 header length.
     // clang-format off
@@ -888,6 +891,22 @@ class MachnetEngine {
       return;
     }
 
+
+    // Farbod: THIS INLINES THE LAST LOOKED UP ELEMENT OF THE HASHABLE
+    static net::flow::Key *cached_key = nullptr;
+    static Flow *cached_flow = nullptr;
+    static bool is_cache_valid = false;
+    if (ipv4h->next_proto_id == Ipv4::kUdp && is_cache_valid) {
+      if (cached_key->local_port == machneth->dst_port && cached_key->local_addr == ipv4h->dst_addr) {
+        if (cached_key->remote_port == machneth->src_port && cached_key->remote_addr == ipv4h->src_addr) {
+          // cached matched!
+          cached_flow->InputPacket(pkt);
+          return;
+        }
+      }
+    }
+    // -----------------------------------------------------
+
     switch (ipv4h->next_proto_id) {
       // clang-format off
       [[likely]] case Ipv4::kUdp:
@@ -895,6 +914,14 @@ class MachnetEngine {
           if (active_flows_map_.find(pkt_key) != active_flows_map_.end()) {
         const auto &flow_it = active_flows_map_[pkt_key];
         (*flow_it)->InputPacket(pkt);
+
+        // cache the last matched flow to avoid lookup
+        cached_key = new net::flow::Key(ipv4h->dst_addr, machneth->dst_port,
+            ipv4h->src_addr, machneth->src_port);
+
+        cached_flow = &**flow_it; // get rid of unique_ptr;
+        is_cache_valid = true;
+        // ----------------------------------------------
         return;
       }
 
