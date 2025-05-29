@@ -22,7 +22,7 @@ RUN apt-get update && \
         python3-docutils python3-pyelftools libnuma-dev \
         ca-certificates autoconf \
         libhugetlbfs-dev pciutils libunwind-dev uuid-dev nlohmann-json3-dev \
-        sudo vim libgflags-dev && \
+        sudo vim libgflags-dev build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 # Create user and add to sudo group
@@ -37,7 +37,8 @@ WORKDIR /home/vj2267
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     . $HOME/.cargo/env && \
     rustup component add rustfmt clippy rust-analyzer && \
-    cargo install cargo-watch cargo-edit cargo-expand
+    rustup target add x86_64_unknown_none && \
+    cargo install cargo-watch cargo-edit cargo-expand just
 
 # Add cargo to PATH in .bashrc
 RUN echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $HOME/.bashrc && \
@@ -50,6 +51,17 @@ USER root
 RUN apt-get update && \
     apt-get --purge -y remove rdma-core librdmacm1 ibverbs-providers libibverbs-dev libibverbs1 && \
     rm -rf /var/lib/apt/lists/*
+
+# Install clang
+RUN wget https://apt.llvm.org/llvm.sh && \
+    chmod +x ./llvm.sh && \
+    ./llvm.sh 17 all && \
+    ln -s /usr/lib/llvm-17/bin/clang-cl /usr/bin/clang-cl && \
+    ln -s /usr/lib/llvm-17/bin/llvm-lib /usr/bin/llvm-lib && \
+    ln -s /usr/lib/llvm-17/bin/lld-link /usr/bin/lld-link && \
+    ln -s /usr/lib/llvm-17/bin/llvm-ml /usr/bin/llvm-ml && \
+    ln -s /usr/lib/llvm-17/bin/ld.lld /usr/bin/ld.lld && \
+    ln -s /usr/lib/llvm-17/bin/clang /usr/bin/clang
 
 # Set working directory
 WORKDIR /home/vj2267
