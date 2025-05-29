@@ -1,0 +1,2 @@
+tx_msg_sec,rx_msg_sec,tx_gbps,rx_gbps,rtt_p50_us,rtt_p99_us,rtt_p999_us
+26700.0,26700.0,0.014,0.014,293.0,357.0,409.0
