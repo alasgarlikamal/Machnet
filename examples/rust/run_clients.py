@@ -123,6 +123,8 @@ def run_client(client_id: int, args) -> Tuple[int, Dict]:
         raise e
 
 def write_csv(data: Dict, filename: str):
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
     with open(filename, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=data.keys())
         writer.writeheader()
@@ -131,6 +133,14 @@ def write_csv(data: Dict, filename: str):
 def main():
     args = parse_args()
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Create base data directory if it doesn't exist
+    data_dir = "data"
+    os.makedirs(data_dir, exist_ok=True)
+    
+    # Create experiment directory
+    experiment_dir = os.path.join(data_dir, f"{timestamp}_channels_{args.num_channels}")
+    os.makedirs(experiment_dir, exist_ok=True)
     
     # Run clients in parallel using ThreadPoolExecutor
     all_data = []
@@ -150,7 +160,7 @@ def main():
                 all_data.append(data)
                 
                 # Write individual client data
-                filename = f"client_{timestamp}_{client_id + 1}.csv"
+                filename = os.path.join(experiment_dir, f"client_{client_id + 1}.csv")
                 write_csv(data, filename)
                 print(f"Wrote data to {filename}")
                 
@@ -173,7 +183,7 @@ def main():
     }
     
     # Write combined data
-    combined_filename = f"client_{timestamp}_combined_{args.num_channels}.csv"
+    combined_filename = os.path.join(experiment_dir, f"combined_{args.num_channels}.csv")
     write_csv(combined_data, combined_filename)
     print(f"Wrote combined data to {combined_filename}")
 
