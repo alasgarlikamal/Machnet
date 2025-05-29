@@ -1,0 +1,10 @@
+[package]
+
+name = "hypermach-guest"
+version = "0.1.0"
+edition = "2024"
+author = ["vjabrayilov"]
+
+[dependencies]
+hyperlight-common = {git = "https://github.com/hyperlight-dev/hyperlight/", tag = "v0.4.0", default-features = false, package = "hyperlight-common" }
+hyperlight-guest = { git = "https://github.com/hyperlight-dev/hyperlight/", tag = "v0.4.0", package = "hyperlight-guest" }

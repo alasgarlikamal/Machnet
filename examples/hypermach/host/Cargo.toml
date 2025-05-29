@@ -1,0 +1,19 @@
+[package]
+name = "hypermach-host"
+version = "0.1.0"
+edition = "2024"
+author = ["vjabrayilov"]
+
+[dependencies]
+anyhow = "1.0.93"
+log = "0.4.22"
+serde = { version = "1.0.217", features = ["std", "derive"] }
+serde_json = { version = "1.0.134", features = ["std"] }
+
+#hyperlight-guest = { git = "https://github.com/hyperlight-dev/hyperlight/", tag = "v0.4.0", package = "hyperlight-guest" }
+hyperlight-host = { git = "https://github.com/hyperlight-dev/hyperlight/", tag = "v0.4.0", default-features = false, features = ["kvm"] }
+hyperlight-common = {git = "https://github.com/hyperlight-dev/hyperlight/", tag = "v0.4.0", default-features = false, package = "hyperlight-common" }
+rand = "0.8.5"
+machnet = "0.1.8"
+signal-hook = "0.3.17"
+env_logger = "0.11.8"
