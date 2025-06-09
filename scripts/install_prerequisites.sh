@@ -43,7 +43,7 @@ install_system_packages() {
         sudo vim libgflags-dev
 
     # Remove conflicting packages
-    sudo apt-get --purge -y remove rdma-core librdmacm1 ibverbs-providers libibverbs-dev libibverbs1
+    # sudo apt-get --purge -y remove rdma-core librdmacm1 ibverbs-providers libibverbs-dev libibverbs1
 }
 
 # Function to install Rust and development tools
