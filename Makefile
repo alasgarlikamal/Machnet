@@ -45,7 +45,7 @@ SERVER_IP?=10.10.1.1
 CLIENT_IP?=10.10.1.2
 
 # Define all phony targets
-.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp shim check_shim_deps build_shim help
+.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp shim check_shim_deps build_shim help git_submodules
 
 # Default target is help
 .DEFAULT_GOAL := help
@@ -66,12 +66,18 @@ help:
 	@echo "  run_msg_gen_server_cpp  - Run msg_gen server"
 	@echo "  run_msg_gen_client_cpp  - Run msg_gen client"
 	@echo "  shim                    - Build and install the Machnet shim library (requires sudo)"
+	@echo "  git_submodules          - Initialize and update git submodules"
 	@echo ""
 	@echo "Variables that can be overridden:"
 	@echo "  SHIM_INSTALL_DIR        - Directory to install shim library (default: /usr/lib)"
 	@echo "  CONFIG_FILE             - Path to Machnet config file"
 	@echo "  SERVER_IP               - IP address for msg_gen server"
 	@echo "  CLIENT_IP               - IP address for msg_gen client"
+
+# Git submodules target
+git_submodules:
+	@echo "Initializing and updating git submodules..."
+	git submodule update --init --recursive
 
 # Users likely want to get containers that work on the current system,
 # so that is the default.
@@ -90,9 +96,9 @@ native_containers:
 	$(GET_BUILDX_INFO_COMMAND) | $(GET_TARGETS_FOR_ARCH_CMD) --arch native | $(BUILD_TARGETS_COMMAND) $(BUILD_COMMAND_EXTRA_ARGS)
 
 # Build targets for Machnet
-debug: $(DEBUG_BINARY)
+debug: git_submodules $(DEBUG_BINARY)
 
-release: $(RELEASE_BINARY)
+release: git_submodules $(RELEASE_BINARY)
 
 # Debug build rules
 $(DEBUG_BUILD_DIR)/CMakeCache.txt: $(SRC_FILES)
