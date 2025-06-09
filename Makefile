@@ -89,23 +89,23 @@ all_containers:
 x86_containers:
 	$(GET_BUILDX_INFO_COMMAND) | $(GET_TARGETS_FOR_ARCH_CMD) --arch x86 | $(BUILD_TARGETS_COMMAND) $(BUILD_COMMAND_EXTRA_ARGS)
 
-arm_containers: 
+arm_containers:
 	$(GET_BUILDX_INFO_COMMAND) | $(GET_TARGETS_FOR_ARCH_CMD) --arch arm | $(BUILD_TARGETS_COMMAND) $(BUILD_COMMAND_EXTRA_ARGS)
 
 native_containers:
 	$(GET_BUILDX_INFO_COMMAND) | $(GET_TARGETS_FOR_ARCH_CMD) --arch native | $(BUILD_TARGETS_COMMAND) $(BUILD_COMMAND_EXTRA_ARGS)
 
 # Build targets for Machnet
-debug: git_submodules $(DEBUG_BINARY)
+debug: $(DEBUG_BINARY)
 
-release: git_submodules $(RELEASE_BINARY)
+release: $(RELEASE_BINARY)
 
 # Debug build rules
 $(DEBUG_BUILD_DIR)/CMakeCache.txt: $(SRC_FILES)
 	@mkdir -p $(DEBUG_BUILD_DIR)
 	cd $(DEBUG_BUILD_DIR) && cmake -DCMAKE_BUILD_TYPE=Debug -GNinja ..
 
-$(DEBUG_BINARY): $(DEBUG_BUILD_DIR)/CMakeCache.txt
+$(DEBUG_BINARY): git_submodules $(DEBUG_BUILD_DIR)/CMakeCache.txt
 	cd $(DEBUG_BUILD_DIR) && ninja
 
 # Release build rules
@@ -113,7 +113,7 @@ $(RELEASE_BUILD_DIR)/CMakeCache.txt: $(SRC_FILES)
 	@mkdir -p $(RELEASE_BUILD_DIR)
 	cd $(RELEASE_BUILD_DIR) && cmake -DCMAKE_BUILD_TYPE=Release -GNinja ..
 
-$(RELEASE_BINARY): $(RELEASE_BUILD_DIR)/CMakeCache.txt
+$(RELEASE_BINARY): git_submodules $(RELEASE_BUILD_DIR)/CMakeCache.txt
 	cd $(RELEASE_BUILD_DIR) && ninja
 
 # Hugepage setup
