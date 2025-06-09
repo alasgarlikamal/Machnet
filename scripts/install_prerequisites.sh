@@ -113,6 +113,7 @@ install_dpdk() {
         -Ddisable_drivers=${DPDK_DISABLED_DRIVER_GROUPS},${DPDK_DISABLED_COMMON_DRIVERS},${DPDK_DISABLED_BUS_DRIVERS},${DPDK_DISABLED_NIC_DRIVERS}
 
     sudo ninja -C build install
+    sudo ldconfig
 }
 
 # Main function
