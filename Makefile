@@ -39,13 +39,14 @@ HUGEPAGE_PATH=/sys/devices/system/node/node*/hugepages/hugepages-$(HUGEPAGE_SIZE
 
 # Configuration file path
 CONFIG_FILE?=src/apps/machnet/config.json
+CONFIG_DIR=$(dir $(CONFIG_FILE))
 
 # Default IPs for msg_gen
 SERVER_IP?=10.10.1.1
 CLIENT_IP?=10.10.1.2
 
 # Define all phony targets
-.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp shim check_shim_deps build_shim help git_submodules
+.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp shim check_shim_deps build_shim help git_submodules generate_config
 
 # Default target is help
 .DEFAULT_GOAL := help
@@ -67,6 +68,7 @@ help:
 	@echo "  run_msg_gen_client_cpp  - Run msg_gen client"
 	@echo "  shim                    - Build and install the Machnet shim library (requires sudo)"
 	@echo "  git_submodules          - Initialize and update git submodules"
+	@echo "  generate_config         - Generate Machnet configuration file"
 	@echo ""
 	@echo "Variables that can be overridden:"
 	@echo "  SHIM_INSTALL_DIR        - Directory to install shim library (default: /usr/lib)"
@@ -127,8 +129,33 @@ setup_hugepages:
 		echo "Hugepages already configured."; \
 	fi
 
+# Generate config.json
+generate_config:
+	@echo "Generating Machnet configuration file..."
+	@mkdir -p $(CONFIG_DIR)
+	@INTERFACE=$$(ip -o -4 addr show | grep "10.10" | awk '{print $$2}' | cut -d@ -f1 | head -n1); \
+	if [ -z "$$INTERFACE" ]; then \
+		echo "Error: No network interface found with IP in 10.10.x.x range"; \
+		exit 1; \
+	fi; \
+	MAC=$$(ip link show $$INTERFACE | grep -o -E "([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}" | head -n1); \
+	IP=$$(ip -o -4 addr show $$INTERFACE | awk '{print $$4}' | cut -d/ -f1); \
+	if [ -z "$$MAC" ] || [ -z "$$IP" ]; then \
+		echo "Error: Failed to get MAC or IP address for interface $$INTERFACE"; \
+		exit 1; \
+	fi; \
+	echo '{' > $(CONFIG_FILE); \
+	echo '  "machnet_config": {' >> $(CONFIG_FILE); \
+	echo '    "'$$MAC'": {' >> $(CONFIG_FILE); \
+	echo '      "ip": "'$$IP'",' >> $(CONFIG_FILE); \
+	echo '      "engine_threads": 1' >> $(CONFIG_FILE); \
+	echo '    }' >> $(CONFIG_FILE); \
+	echo '  }' >> $(CONFIG_FILE); \
+	echo '}' >> $(CONFIG_FILE); \
+	echo "Configuration file generated at $(CONFIG_FILE) with interface $$INTERFACE (MAC: $$MAC, IP: $$IP)"
+
 # Run Machnet
-run_machnet: setup_hugepages $(RELEASE_BINARY)
+run_machnet: setup_hugepages generate_config $(RELEASE_BINARY)
 	@echo "Starting Machnet with config: $(CONFIG_FILE)..."
 	sudo GLOG_logtostderr=1 $(RELEASE_BINARY) -config_json $(CONFIG_FILE)
 
