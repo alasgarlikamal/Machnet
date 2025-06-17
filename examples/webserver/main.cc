@@ -2,7 +2,7 @@
 
 static volatile int g_keep_running = 1;
 
-DEFINE_string(local_ip, "127.0.0.1", "IP of the local Machnet interface");
+DEFINE_string(local_ip, "10.10.1.1", "IP of the local Machnet interface");
 DEFINE_string(local_port, "8000", "Remote port to connect to.");
 
 void SigIntHandler([[maybe_unused]] int signal) { g_keep_running = 0; }
