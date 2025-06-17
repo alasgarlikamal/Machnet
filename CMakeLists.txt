@@ -44,3 +44,4 @@ include_directories(SYSTEM third_party/xxHash)
 
 set(BUILD_TESTING ON)
 add_subdirectory(src)
+add_subdirectory(examples/webserver)
