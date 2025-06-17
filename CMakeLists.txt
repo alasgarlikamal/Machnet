@@ -34,14 +34,13 @@ include_directories(SYSTEM third_party/googlebench/include)
 # Common sub-projects: HdrHistogram
 set(HDR_HISTOGRAM_BUILD_PROGRAMS OFF CACHE BOOL "Minimize HDR histogram build")
 set(HDR_LOG_REQUIRED OFF CACHE BOOL "Disable HDR histogram's log to avoid zlib dependency")
+
 add_subdirectory(third_party/HdrHistogram_c)
 include_directories(SYSTEM third_party/HdrHistogram_c/include/)
-
 include_directories(SYSTEM third_party/xxHash)
 
-# if(NOT gflags_FOUND)
-# endif()
-
 set(BUILD_TESTING ON)
+
 add_subdirectory(src)
 add_subdirectory(examples/webserver)
+add_subdirectory(examples/webclient)
