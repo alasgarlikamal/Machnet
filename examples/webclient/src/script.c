@@ -6,9 +6,6 @@
 #include "http_parser.h"
 #include "stats.h"
 #include "zmalloc.h"
-#include "net.h"
-#include "wrk.h"
-
 
 typedef struct {
     char *name;
@@ -23,8 +20,7 @@ static int script_stats_get(lua_State *);
 static int script_thread_index(lua_State *);
 static int script_thread_newindex(lua_State *);
 static int script_wrk_lookup(lua_State *);
-// static int script_wrk_connect(lua_State *);
-static int script_wrk_connect(lua_State *, thread *, struct config *);
+static int script_wrk_connect(lua_State *);
 static int script_wrk_time_us(lua_State *);
 
 static void set_fields(lua_State *, int, const table_field *);
@@ -50,36 +46,8 @@ static const struct luaL_reg threadlib[] = {
 };
 
 lua_State *script_create(char *file, char *url, char **headers) {
-#ifdef MACHNET
-    static bool machnet_initialized = false;
-    if (!machnet_initialized) {
-    #ifdef MACHNET_DEBUG
-        printf("[DEBUG] Initializing Machnet...\n");
-    #endif
-        if (machnet_init() != 0) {
-            fprintf(stderr, "[ERROR] Failed to initialize Machnet.\n");
-            exit(1);
-        }
-    #ifdef MACHNET_DEBUG
-        printf("[DEBUG] Machnet initialized successfully.\n");
-    #endif
-        machnet_initialized = true;
-    }
-#endif
-
-#ifdef MACHNET_DEBUG
-    // Create Lua state
-    printf("[DEBUG] Creating Lua state.\n");
-#endif
     lua_State *L = luaL_newstate();
-    if (!L) {
-        fprintf(stderr, "[ERROR] Failed to create Lua state.\n");
-        return NULL;
-    }
     luaL_openlibs(L);
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] Lua state created and libraries opened.\n");
-#endif
 
     // Update Lua package.path to include the absolute path of wrk.lua
     char lua_path_cmd[512];
@@ -93,11 +61,6 @@ lua_State *script_create(char *file, char *url, char **headers) {
         return NULL;
     }
 
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] Updated Lua package.path to include wrk.lua location.\n");
-#endif
-
-    // Load the wrk module
     if (luaL_dostring(L, "wrk = require \"wrk\"")) {
         const char *err = lua_tostring(L, -1);
         fprintf(stderr, "[ERROR] Failed to load wrk module: %s\n", err);
@@ -105,11 +68,6 @@ lua_State *script_create(char *file, char *url, char **headers) {
         return NULL;
     }
 
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] wrk module loaded.\n");
-#endif
-
-    // Register metatables
     luaL_newmetatable(L, "wrk.addr");
     luaL_register(L, NULL, addrlib);
     luaL_newmetatable(L, "wrk.stats");
@@ -117,28 +75,14 @@ lua_State *script_create(char *file, char *url, char **headers) {
     luaL_newmetatable(L, "wrk.thread");
     luaL_register(L, NULL, threadlib);
 
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] Lua metatables created and registered.\n");
-#endif
-
-    // Parse the URL
     struct http_parser_url parts = {};
-    if (!script_parse_url(url, &parts)) {
-        fprintf(stderr, "[ERROR] Failed to parse URL: %s\n", url);
-        lua_close(L);
-        return NULL;
-    }
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] URL parsed successfully: %s\n", url);
-#endif
-
-    // Determine path
+    script_parse_url(url, &parts);
     char *path = "/";
+
     if (parts.field_set & (1 << UF_PATH)) {
         path = &url[parts.field_data[UF_PATH].off];
     }
 
-    // Set Lua fields
     const table_field fields[] = {
         { "lookup",  LUA_TFUNCTION, script_wrk_lookup  },
         { "connect", LUA_TFUNCTION, script_wrk_connect },
@@ -148,29 +92,13 @@ lua_State *script_create(char *file, char *url, char **headers) {
     };
 
     lua_getglobal(L, "wrk");
-    if (!lua_istable(L, -1)) {
-        fprintf(stderr, "[ERROR] 'wrk' is not a table in Lua state.\n");
-        lua_close(L);
-        return NULL;
-    }
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] 'wrk' table retrieved from Lua state.\n");
-#endif
+
     set_field(L, 4, "scheme", push_url_part(L, url, &parts, UF_SCHEMA));
     set_field(L, 4, "host",   push_url_part(L, url, &parts, UF_HOST));
     set_field(L, 4, "port",   push_url_part(L, url, &parts, UF_PORT));
     set_fields(L, 4, fields);
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] Lua fields set (scheme, host, port, etc.).\n");
-#endif
 
-    // Add headers to Lua
     lua_getfield(L, 4, "headers");
-    if (!lua_istable(L, -1)) {
-        fprintf(stderr, "[ERROR] 'wrk.headers' is not a table in Lua state.\n");
-        lua_close(L);
-        return NULL;
-    }
 
     for (char **h = headers; *h; h++) {
         char *p = strchr(*h, ':');
@@ -182,24 +110,13 @@ lua_State *script_create(char *file, char *url, char **headers) {
     }
     lua_pop(L, 5);
 
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] HTTP headers added to Lua state.\n");
-#endif
-
-    // Load Lua script file if provided
     if (file && luaL_dofile(L, file)) {
         const char *cause = lua_tostring(L, -1);
         fprintf(stderr, "[ERROR] Failed to load Lua script '%s': %s\n", file, cause);
-        lua_close(L);
-        return NULL;
     }
-#ifdef MACHNET_DEBUG
-    printf("[DEBUG] Lua script file loaded: %s\n", file ? file : "(none)");
-#endif
+
     return L;
 }
-
-
 
 bool script_resolve(lua_State *L, char *host, char *service) {
     lua_getglobal(L, "wrk");
@@ -562,53 +479,10 @@ static int script_wrk_lookup(lua_State *L) {
     return 1;
 }
 
-
-int script_wrk_connect(lua_State *L, thread *thread, struct config *cfg) {
-
-#if 0
-    // Initialize a connection object
-    connection c = {0};
-
-    lua_getglobal(L, "wrk");
-    lua_getfield(L, -1, "host");
-    const char *host = lua_tostring(L, -1);
-    lua_getfield(L, -2, "port");
-    uint16_t port = (uint16_t)atoi(lua_tostring(L, -1));
-
-    c.channel_ctx = machnet_attach();
-    if (!c.channel_ctx) {
-        fprintf(stderr, "[ERROR] Failed to attach Machnet channel.\n");
-        lua_pushboolean(L, 0);
-        lua_pop(L, 3); // Cleanup Lua stack
-        return 1;
-    }
-
-    if (thread->complete >= cfg->connections) {
-#ifdef MACHNET_DEBUG
-        printf("[DEBUG] Maximum connections reached. Not attempting new connection.\n");
-#endif
-        lua_pushboolean(L, 0);
-       // machnet_detach(c.channel_ctx); // Cleanup
-        lua_pop(L, 3); // Cleanup Lua stack
-        return 1;
-    }
-
-    if (sock_connect(&c, "10.10.1.1", (char *)host, port) == OK) {
-        lua_pushboolean(L, 1);
-    } else {
-        lua_pushboolean(L, 0);
-       // machnet_detach(c.channel_ctx); // Cleanup
-    }
-
-    lua_pop(L, 3); // Cleanup Lua stack
-#endif
+int script_wrk_connect(lua_State *L) {
+    fprintf(stderr, "[WARNING] script_wrk_connect is not implemented...\n");
     return 1;
 }
-
-
-
-
-
 
 static int script_wrk_time_us(lua_State *L) {
     struct timeval tv;
