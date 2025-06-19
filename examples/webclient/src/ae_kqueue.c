@@ -28,11 +28,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef __APPLE__
+
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
-#endif
 
 typedef struct aeApiState {
     int kqfd;
