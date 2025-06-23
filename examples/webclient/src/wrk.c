@@ -204,8 +204,8 @@ int main(int argc, char **argv) {
   }
 
   long double runtime_s = runtime_us / 1000000.0;
-  long double req_per_s = complete / runtime_s;
-  long double bytes_per_s = bytes / runtime_s;
+  long double req_per_s = complete / (long double)cfg.duration;
+  long double bytes_per_s = bytes / (long double)cfg.duration;
 
   stats *latency_stats = stats_alloc(10);
   latency_stats->min = hdr_min(latency_histogram);
@@ -448,7 +448,7 @@ static uint64_t usec_to_next_send(connection *c) {
   uint64_t next_start_time = c->thread_start + (c->complete / c->throughput);
   bool send_now = true;
 
-  if (next_start_time > now && !(next_start_time - now < 100)) {
+  if (next_start_time > now) {
     // We are on pace. Indicate caught_up and don't send now.
     c->caught_up = true;
     send_now = false;
@@ -635,6 +635,7 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
 #endif
 
   c->thread_start = time_us();
+  c->thread->stop_at = time_us() + cfg.duration * 1000000;
   aeCreateFileEvent(c->thread->loop, fd, AE_WRITABLE, socket_writeable, c);
 
   return;
@@ -741,7 +742,6 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
   if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n)
     goto error;
   c->thread->bytes += n;
-https:  // open.spotify.com/track/7uFLscUNLePnmqQ4k8rVcp?si=560f6fa92b13490a
 
   // Re-register write event after reading to allow sending next request
   aeCreateFileEvent(c->thread->loop, fd, AE_WRITABLE, socket_writeable, c);
