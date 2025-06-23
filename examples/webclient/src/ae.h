@@ -33,6 +33,8 @@
 #ifndef __AE_H__
 #define __AE_H__
 
+#include <sys/time.h>
+
 #define AE_OK 0
 #define AE_ERR -1
 
@@ -68,13 +70,13 @@ typedef struct aeFileEvent {
 
 /* Time event structure */
 typedef struct aeTimeEvent {
-    long long id; /* time event identifier. */
-    long when_sec; /* seconds */
-    long when_ms; /* milliseconds */
-    aeTimeProc *timeProc;
-    aeEventFinalizerProc *finalizerProc;
-    void *clientData;
-    struct aeTimeEvent *next;
+  long long id;  /* time event identifier. */
+  long when_sec; /* seconds */
+  long when_us;  /* microseconds */
+  aeTimeProc *timeProc;
+  aeEventFinalizerProc *finalizerProc;
+  void *clientData;
+  struct aeTimeEvent *next;
 } aeTimeEvent;
 
 /* A fired event */
@@ -85,16 +87,16 @@ typedef struct aeFiredEvent {
 
 /* State of an event based program */
 typedef struct aeEventLoop {
-    int maxfd;   /* highest file descriptor currently registered */
-    int setsize; /* max number of file descriptors tracked */
-    long long timeEventNextId;
-    time_t lastTime;     /* Used to detect system clock skew */
-    aeFileEvent *events; /* Registered events */
-    aeFiredEvent *fired; /* Fired events */
-    aeTimeEvent *timeEventHead;
-    int stop;
-    void *apidata; /* This is used for polling API specific data */
-    aeBeforeSleepProc *beforesleep;
+  int maxfd;   /* highest file descriptor currently registered */
+  int setsize; /* max number of file descriptors tracked */
+  long long timeEventNextId;
+  struct timeval lastTime; /* Used to detect system clock skew */
+  aeFileEvent *events;     /* Registered events */
+  aeFiredEvent *fired;     /* Fired events */
+  aeTimeEvent *timeEventHead;
+  int stop;
+  void *apidata; /* This is used for polling API specific data */
+  aeBeforeSleepProc *beforesleep;
 } aeEventLoop;
 
 /* Prototypes */
@@ -105,18 +107,14 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
         aeFileProc *proc, void *clientData);
 void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask);
 int aeGetFileEvents(aeEventLoop *eventLoop, int fd);
-long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
-        aeTimeProc *proc, void *clientData,
-        aeEventFinalizerProc *finalizerProc);
+long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long microseconds,
+                            aeTimeProc *proc, void *clientData,
+                            aeEventFinalizerProc *finalizerProc);
 int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id);
 int aeProcessEvents(aeEventLoop *eventLoop, int flags);
+int aeProcessTimeEvents(aeEventLoop *eventLoop);
 int aeWait(int fd, int mask, long long milliseconds);
 void aeMain(aeEventLoop *eventLoop);
 char *aeGetApiName(void);
 void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep);
-
-#ifdef MACHNET
-void aeReadFast(void *arg);
-#endif
-
 #endif

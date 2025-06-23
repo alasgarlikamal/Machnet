@@ -90,6 +90,9 @@ typedef struct connection {
 
     void *channel_ctx;  // Machnet Channel Context
     MachnetFlow_t machnet_flow; //Machnet flow information
+#ifdef MACHNET_DEBUG
+    uint64_t index;
+#endif
 } connection;
 
 #endif /* WRK_H */

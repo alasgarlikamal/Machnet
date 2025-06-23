@@ -12,6 +12,10 @@
 // Local IP address to bind Machnet
 #define DEFAULT_LOCAL_IP "10.10.1.2"
 
+// Static variables for Machnet fd alias
+static int machnet_fd_alias = 1;
+static pthread_mutex_t machnet_fd_mutex;
+
 static struct config {
   uint64_t threads;
   uint64_t connections;
@@ -281,85 +285,50 @@ void *thread_main(void *arg) {
     c->catch_up_throughput = throughput * 2;
     c->complete = 0;
     c->caught_up = true;
-    // Stagger connects 5 msec apart within thread
-    aeCreateTimeEvent(loop, i * 5, delayed_initial_connect, c, NULL);
+    // Stagger connects 5 msec apart within thread (convert to microseconds)
+    aeCreateTimeEvent(loop, i * 5000, delayed_initial_connect, c, NULL);
   }
 
-  uint64_t calibrate_delay = CALIBRATE_DELAY_MS + (thread->connections * 5);
-  uint64_t timeout_delay = TIMEOUT_INTERVAL_MS + (thread->connections * 5);
+  uint64_t calibrate_delay =
+      (CALIBRATE_DELAY_MS + (thread->connections * 5)) * 1000;
+  uint64_t timeout_delay =
+      (TIMEOUT_INTERVAL_MS + (thread->connections * 5)) * 1000;
   aeCreateTimeEvent(loop, calibrate_delay, calibrate, thread, NULL);
   aeCreateTimeEvent(loop, timeout_delay, check_timeouts, thread, NULL);
 
   thread->start = time_us();
-
-  // Single event loop: process time events, then handle all socket I/O
-  aeEventLoop *eventLoop = thread->loop;
-  eventLoop->stop = 0;
-  while (!eventLoop->stop) {
-    // Process time events first (calibration, timeouts, etc.)
-    // fprintf(stderr, "Processing time events\n");
-    aeProcessEvents(eventLoop, AE_TIME_EVENTS);
-
-    // Process all socket I/O without blocking
-    for (int i = 0; i < eventLoop->setsize; i++) {
-      if (eventLoop && eventLoop->events) {
-        aeFileEvent *fe = &eventLoop->events[i];
-        if (fe && fe->mask != AE_NONE) {
-          // Process write events first (sending data)
-          if (fe->mask & AE_WRITABLE && fe->wfileProc) {
-            // fprintf(stderr, "Processing write events\n");
-            fe->wfileProc(eventLoop, i, fe->clientData, AE_WRITABLE);
-          }
-          // Then process read events (receiving data)
-          if (fe->mask & AE_READABLE && fe->rfileProc) {
-            // fprintf(stderr, "Processing read events\n");
-            fe->rfileProc(eventLoop, i, fe->clientData, AE_READABLE);
-          }
-        }
-      }
-    }
-  }
-
+  aeMain(thread->loop);
   aeDeleteEventLoop(loop);
   zfree(thread->cs);
 
   return NULL;
 }
 
-static int machnet_fd_alias = 1;
-static pthread_mutex_t machnet_fd_mutex;
-
 static int connect_socket(thread *thread, connection *c) {
+#ifdef MACHNET_DEBUG
+  fprintf(stderr,
+          "[DEBUG] connect_socket: fd=%d, thread=%p, "
+          "c->thread_start=%lu\n",
+          c->fd, c->thread, c->thread_start);
+#endif
   struct aeEventLoop *loop = thread->loop;
-  int fd;
-  int flags = 1;
-
-  pthread_mutex_lock(&machnet_fd_mutex);
-  fd = machnet_fd_alias;
-  machnet_fd_alias++;
-  pthread_mutex_unlock(&machnet_fd_mutex);
-
   c->latest_connect = time_us();
 
-  flags = AE_WRITABLE;
-  if (aeCreateFileEvent(loop, fd, flags, socket_connected, c) == AE_OK) {
+  int flags = AE_WRITABLE;
+  if (aeCreateFileEvent(loop, c->fd, flags, socket_connected, c) == AE_OK) {
     c->parser.data = c;
-    c->fd = fd;
-    return fd;
+    return c->fd;
+  } else {
+    thread->errors.connect++;
+    return -1;
   }
-
-error:
-  thread->errors.connect++;
-  return -1;
 }
 
 static int reconnect_socket(thread *thread, connection *c) {
-  aeDeleteFileEvent(thread->loop, c->fd, AE_WRITABLE | AE_READABLE);
-
 #ifdef MACHNET_DEBUG
   printf("[DEBUG] Reconnecting socket...\n");
 #endif
-
+  aeDeleteFileEvent(thread->loop, c->fd, AE_WRITABLE | AE_READABLE);
   sock.close(c);
   return connect_socket(thread, c);
 }
@@ -367,7 +336,19 @@ static int reconnect_socket(thread *thread, connection *c) {
 static int delayed_initial_connect(aeEventLoop *loop, long long id,
                                    void *data) {
   connection *c = data;
+
+  pthread_mutex_lock(&machnet_fd_mutex);
+  c->fd = machnet_fd_alias;
+  machnet_fd_alias++;
+  pthread_mutex_unlock(&machnet_fd_mutex);
+
   c->thread_start = time_us();
+#ifdef MACHNET_DEBUG
+  fprintf(stderr,
+          "[DEBUG] delayed_initial_connect: fd=%d, thread=%p, "
+          "c->thread_start=%lu\n",
+          c->fd, c->thread, c->thread_start);
+#endif
   connect_socket(c->thread, c);
   return AE_NOMORE;
 }
@@ -380,7 +361,7 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
       hdr_value_at_percentile(thread->latency_histogram, 90.0) / 1000.0L;
   long double interval = MAX(latency * 2, 10);
 
-  if (mean == 0) return CALIBRATE_DELAY_MS;
+  if (mean == 0) return CALIBRATE_DELAY_MS * 1000;  // Convert to microseconds
 
   thread->mean = (uint64_t)mean;
   hdr_reset(thread->latency_histogram);
@@ -394,7 +375,8 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
       "  Thread calibration: mean lat.: %.3fms, rate sampling interval: %dms\n",
       (thread->mean) / 1000.0, thread->interval);
 
-  aeCreateTimeEvent(loop, thread->interval, sample_rate, thread, NULL);
+  aeCreateTimeEvent(loop, thread->interval * 1000, sample_rate, thread,
+                    NULL);  // Convert to microseconds
 
   return AE_NOMORE;
 }
@@ -416,7 +398,7 @@ static int check_timeouts(aeEventLoop *loop, long long id, void *data) {
     aeStop(loop);
   }
 
-  return TIMEOUT_INTERVAL_MS;
+  return TIMEOUT_INTERVAL_MS * 1000;  // Convert to microseconds
 }
 
 static int sample_rate(aeEventLoop *loop, long long id, void *data) {
@@ -432,7 +414,7 @@ static int sample_rate(aeEventLoop *loop, long long id, void *data) {
   thread->requests = 0;
   thread->start = time_us();
 
-  return thread->interval;
+  return thread->interval * 1000;  // Convert to microseconds
 }
 
 static int header_field(http_parser *parser, const char *at, size_t len) {
@@ -463,12 +445,10 @@ static int response_body(http_parser *parser, const char *at, size_t len) {
 
 static uint64_t usec_to_next_send(connection *c) {
   uint64_t now = time_us();
-
   uint64_t next_start_time = c->thread_start + (c->complete / c->throughput);
-
   bool send_now = true;
 
-  if (next_start_time > now) {
+  if (next_start_time > now && !(next_start_time - now < 100)) {
     // We are on pace. Indicate caught_up and don't send now.
     c->caught_up = true;
     send_now = false;
@@ -499,14 +479,28 @@ static uint64_t usec_to_next_send(connection *c) {
     c->latest_expected_start = next_start_time;
   }
 
+#ifdef MACHNET_DEBUG
+  fprintf(stderr,
+          "[DEBUG] usec_to_next_send: fd=%d, thread=%p, send_now=%d, "
+          "next_start_time=%lu, now=%lu next_start_time-now=%ld, "
+          "c->thread_start=%lu, c->complete=%lu, c->throughput=%f\n",
+          c->fd, c->thread, send_now, next_start_time, now,
+          next_start_time - now, c->thread_start, c->complete, c->throughput);
+#endif
+
   return send_now ? 0 : (next_start_time - now);
 }
 
 static int delay_request(aeEventLoop *loop, long long id, void *data) {
   connection *c = data;
   uint64_t time_usec_to_wait = usec_to_next_send(c);
+#ifdef MACHNET_DEBUG
+  fprintf(stderr,
+          "[DEBUG] delay_request: fd=%d, thread=%p, time_usec_to_wait=%lu\n",
+          c->fd, c->thread, time_usec_to_wait);
+#endif
   if (time_usec_to_wait) {
-    return round((time_usec_to_wait / 1000.0L) + 0.5); /* don't send, wait */
+    return time_usec_to_wait;
   }
   aeCreateFileEvent(c->thread->loop, c->fd, AE_WRITABLE, socket_writeable, c);
   return AE_NOMORE;
@@ -546,9 +540,17 @@ static int response_complete(http_parser *parser) {
   // start time based on the completion count of these individual pipelined
   // requests we can easily end up "gifting" them time and seeing
   // negative latencies.
+#ifdef MACHNET_DEBUG
+  fprintf(stderr,
+          "[DEBUG] response_complete: fd=%d, thread=%p, now=%lu, "
+          "c->thread_start=%lu, c->complete_at_last_batch_start=%lu, "
+          "c->throughput=%f\n",
+          c->fd, c->thread, now, c->thread_start,
+          c->complete_at_last_batch_start, c->throughput);
+#endif
+
   uint64_t expected_latency_start =
       c->thread_start + (c->complete_at_last_batch_start / c->throughput);
-
   int64_t expected_latency_timing = now - expected_latency_start;
 
   if (expected_latency_timing < 0) {
@@ -588,6 +590,14 @@ static int response_complete(http_parser *parser) {
 
     uint64_t actual_latency_timing = now - c->actual_latency_start;
     hdr_record_value(thread->u_latency_histogram, actual_latency_timing);
+#ifdef MACHNET_DEBUG
+    fprintf(stderr,
+            "[DEBUG] response_complete: index=%lu, now=%lu, "
+            "expected_latency_start=%lu, "
+            "actual_latency_timing=%lu vs expected_latency_timing=%lu\n",
+            c->index, now, expected_latency_start, actual_latency_timing,
+            expected_latency_timing);
+#endif
   }
 
   if (!http_should_keep_alive(parser)) {
@@ -603,9 +613,12 @@ done:
 
 static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
   connection *c = data;
+#ifdef MACHNET_DEBUG
   fprintf(stderr,
-          "[DEBUG] socket_connected event firead at thread %p for fd %d\n",
-          c->thread, fd);
+          "[DEBUG] socket_connected event firead at thread %p for fd %d and "
+          "thread start time is %lu\n",
+          c->thread, fd, c->thread_start);
+#endif
   switch (sock.connect(c, cfg.local_ip, cfg.host, cfg.port)) {
     case OK:
       break;
@@ -617,9 +630,11 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
 
   http_parser_init(&c->parser, HTTP_RESPONSE);
   c->written = 0;
+#ifdef MACHNET_DEBUG
+  c->index = 0;
+#endif
 
-  //   aeCreateFileEvent(c->thread->loop, fd, AE_READABLE, socket_readable, c);
-
+  c->thread_start = time_us();
   aeCreateFileEvent(c->thread->loop, fd, AE_WRITABLE, socket_writeable, c);
 
   return;
@@ -636,11 +651,16 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
   if (!c->written) {
     uint64_t time_usec_to_wait = usec_to_next_send(c);
     if (time_usec_to_wait) {
-      int msec_to_wait = round((time_usec_to_wait / 1000.0L) + 0.5);
-
       // Not yet time to send. Delay:
       aeDeleteFileEvent(loop, fd, AE_WRITABLE);
-      aeCreateTimeEvent(thread->loop, msec_to_wait, delay_request, c, NULL);
+      aeCreateTimeEvent(thread->loop, time_usec_to_wait, delay_request, c,
+                        NULL);
+#ifdef MACHNET_DEBUG
+      fprintf(stderr,
+              "[DEBUG] socket_writeable will wait and not send index=%lu: "
+              " at time %lu, fd=%d, thread=%p, time_usec_to_wait=%lu\n",
+              c->index, time_us(), fd, thread, time_usec_to_wait);
+#endif
       return;
     }
     c->latest_write = time_us();
@@ -674,11 +694,21 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
   }
 
   c->written += n;
+
+#ifdef MACHNET_DEBUG
+  fprintf(stderr,
+          "[DEBUG] socket_writeable sent index=%lu at time=%lu: fd=%d, "
+          "thread=%p, written=%lu, length=%lu, latest_should_send_time=%lu, "
+          "latest_expected_start=%lu\n",
+          c->index, time_us(), c->fd, c->thread, c->written, c->length,
+          c->latest_should_send_time, c->latest_expected_start);
+#endif
   if (c->written == c->length) {
     c->written = 0;
   }
 
   aeCreateFileEvent(c->thread->loop, c->fd, AE_READABLE, socket_readable, c);
+  aeDeleteFileEvent(c->thread->loop, c->fd, AE_WRITABLE);
   return;
 
 error:
@@ -690,21 +720,35 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
   connection *c = data;
   size_t n;
 
-  switch (sock.read(c, &n)) {
-    case OK:
-      break;
-    case ERROR:
-      goto error;
-    case RETRY:
-      return;
+  status read_status = sock.read(c, &n);
+  if (read_status == ERROR) {
+    goto error;
   }
 
+  while (read_status == RETRY) {
+    read_status = sock.read(c, &n);
+    if (read_status == ERROR) {
+      goto error;
+    }
+  }
+
+#ifdef MACHNET_DEBUG
+  fprintf(stderr,
+          "[DEBUG] socket_readable read index=%lu at time=%lu: fd=%d, "
+          "thread=%p, n=%lu\n",
+          c->index, time_us(), fd, c->thread, n);
+#endif
   if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n)
     goto error;
   c->thread->bytes += n;
+https:  // open.spotify.com/track/7uFLscUNLePnmqQ4k8rVcp?si=560f6fa92b13490a
 
   // Re-register write event after reading to allow sending next request
   aeCreateFileEvent(c->thread->loop, fd, AE_WRITABLE, socket_writeable, c);
+  aeDeleteFileEvent(c->thread->loop, fd, AE_READABLE);
+#ifdef MACHNET_DEBUG
+  c->index++;
+#endif
   return;
 
 error:

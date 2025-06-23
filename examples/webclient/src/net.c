@@ -4,10 +4,16 @@
 
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "machnet.h"
 
+static uint64_t time_us() {
+  struct timeval t;
+  gettimeofday(&t, NULL);
+  return (t.tv_sec * 1000000) + t.tv_usec;
+}
 status sock_connect(connection *c, char *local_ip, char *remote_ip,
                     uint16_t remote_port) {
   if (!remote_ip || strlen(remote_ip) == 0) {
@@ -27,8 +33,8 @@ status sock_connect(connection *c, char *local_ip, char *remote_ip,
   int connect_status = machnet_connect(c->channel_ctx, local_ip, remote_ip,
                                        remote_port, &c->machnet_flow);
   if (connect_status == 0) {
-    printf("[INFO] sock_connect: Connected successfully to %s:%u\n", remote_ip,
-           remote_port);
+    printf("[INFO] sock_connect: Connected successfully to %s:%u and c->thread_start=%lu\n",
+           remote_ip, remote_port, c->thread_start);
     return OK;
   } else {
     fprintf(stderr, "[ERROR] sock_connect: Failed to connect to %s:%u: %s\n",
@@ -52,7 +58,8 @@ status sock_read(connection *c, size_t *n) {
     *n = (size_t)bytes_received;
 
 #ifdef MACHNET_DEBUG
-    printf("[DEBUG] sock_recv: Received %ld bytes.\n", bytes_received);
+    printf("[DEBUG] sock_recv: Received %ld bytes at time %lu.\n",
+           bytes_received, time_us());
 #endif
 
     return OK;
@@ -73,7 +80,7 @@ status sock_write(connection *c, char *buf, size_t len, size_t *n) {
     *n = len;
 
 #ifdef MACHNET_DEBUG
-    printf("[DEBUG] sock_write: Sent %zu bytes\n", len);
+    printf("[DEBUG] sock_write: Sent %zu bytes at time %lu.\n", len, time_us());
 #endif
 
     return OK;
