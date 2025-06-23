@@ -6,13 +6,8 @@ project(webclient VERSION 0.0.1 DESCRIPTION "High-performance HTTP benchmarking 
 include(CTest)
 set(BUILD_TESTING OFF) # Disable testing for third-party modules
 
-# Add defines
-add_definitions( -DMACHNET )
-
-# # Define source files from the local src directory
-# file(GLOB WEBCLIENT_SOURCES
-#     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
-# )
+# Apply centralized MACHNET definitions (includes MACHNET_DEBUG for debug builds)
+# This uses the centralized configuration from the main CMakeLists.txt
 
 # Define source files from the local src directory
 set(WEBCLIENT_SOURCES
@@ -34,6 +29,9 @@ set(WEBCLIENT_SOURCES
 
 # Define executable
 add_executable(webclient ${WEBCLIENT_SOURCES})
+
+# Apply centralized MACHNET compile definitions
+target_apply_machnet_debug_definitions(webclient)
 
 # Locate Lua library and include directory
 set(LUA_LIB "${CMAKE_CURRENT_SOURCE_DIR}/deps/luajit/src/libluajit.so")
