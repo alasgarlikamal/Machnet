@@ -1,0 +1,9 @@
+{
+    "connections": 1,
+    "threads": 1,
+    "start_rate": 10,
+    "stop_rate": 30,
+    "step": 10,
+    "duration": 15,
+    "url": "http://10.10.1.1:8000/index.html"
+}
