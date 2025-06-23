@@ -49,11 +49,17 @@ lua_State *script_create(char *file, char *url, char **headers) {
     lua_State *L = luaL_newstate();
     luaL_openlibs(L);
 
-    // Update Lua package.path to include the absolute path of wrk.lua
-    char lua_path_cmd[512];
+    // Set Lua package path to include multiple possible locations for wrk.lua
+    char lua_path_cmd[1024];
     snprintf(lua_path_cmd, sizeof(lua_path_cmd),
-             "package.path = package.path .. ';%s/?.lua'",
-             "examples/webclient/src");
+             "package.path = package.path .. "
+             "';./?.lua"                                    // Current directory
+             ";./src/?.lua"                                 // src subdirectory  
+             ";./examples/webclient/src/?.lua"              // From project root
+             ";examples/webclient/src/?.lua"                // Relative path
+             ";../examples/webclient/src/?.lua"             // From build dir
+             ";../../examples/webclient/src/?.lua'"         // From nested build dir
+             );
     if (luaL_dostring(L, lua_path_cmd)) {
         const char *err = lua_tostring(L, -1);
         fprintf(stderr, "[ERROR] Failed to set Lua package.path: %s\n", err);
