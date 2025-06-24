@@ -46,10 +46,10 @@ def parse_latency_output(output_text):
         if not section_text:
             return data
             
-        # Extract percentiles
-        p50_match = re.search(r'50\.000%\s+([\d.]+)us', section_text)
-        p99_match = re.search(r'99\.000%\s+([\d.]+)us', section_text)
-        p99_9_match = re.search(r'99\.900%\s+([\d.]+)us', section_text)
+        # Extract percentiles - handle various formatting issues
+        p50_match = re.search(r'50\.000%\s*([\d.]+)(?:us?)?', section_text)
+        p99_match = re.search(r'99\.000%\s*([\d.]+)(?:us?)?', section_text)
+        p99_9_match = re.search(r'99\.900%\s*([\d.]+)(?:us?)?', section_text)
         
         if p50_match:
             data['p50'] = float(p50_match.group(1))
@@ -58,17 +58,17 @@ def parse_latency_output(output_text):
         if p99_9_match:
             data['p99_9'] = float(p99_9_match.group(1))
             
-        # Extract mean from detailed spectrum section
+        # Extract mean from detailed spectrum section - already in microseconds
         mean_match = re.search(r'#\[Mean\s*=\s*([\d.]+)', section_text)
         if mean_match:
-            data['avg'] = float(mean_match.group(1)) * 1000  # Convert to microseconds
+            data['avg'] = float(mean_match.group(1))  # Already in microseconds
         else:
             # Try alternative patterns
             alt_mean_match = re.search(r'Mean\s*=\s*([\d.]+)', section_text)
             if alt_mean_match:
-                data['avg'] = float(alt_mean_match.group(1)) * 1000
+                data['avg'] = float(alt_mean_match.group(1))
             else:
-                print("[DEBUG] Section text (first 500 chars):")
+                print("[DEBUG] No mean found in section. Section text (first 500 chars):")
                 print(section_text[:500])
             
         return data
@@ -94,6 +94,32 @@ def parse_latency_output(output_text):
         print("[DEBUG] No uncorrected latency section found")
     
     return metrics
+
+def parse_ranges(range_strings):
+    """Parse range strings in format 'start:stop:step' and return sorted unique rates"""
+    rates = set()
+    
+    for range_str in range_strings:
+        try:
+            parts = range_str.split(':')
+            if len(parts) != 3:
+                print(f"Warning: Invalid range format '{range_str}'. Expected 'start:stop:step'")
+                continue
+                
+            start, stop, step = map(int, parts)
+            
+            # Generate range using Python's range logic: range(start, stop+1, step)
+            # This includes 'stop' value if it's reachable by the step
+            current = start
+            while current <= stop:
+                rates.add(current)
+                current += step
+                
+        except ValueError as e:
+            print(f"Warning: Error parsing range '{range_str}': {e}")
+            continue
+    
+    return sorted(rates)
 
 def run_experiment(config, rate, webclient_path, url, output_dir):
     """Run a single experiment with given rate"""
@@ -152,12 +178,21 @@ def run_experiment(config, rate, webclient_path, url, output_dir):
         return {'rate': rate, 'success': False}
 
 def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Run load testing experiments with webclient')
+    parser.add_argument('output_dir', help='Output directory for results and logs')
+    parser.add_argument('-c', '--config', default='experiment.json', 
+                        help='Configuration file (default: experiment.json)')
+    
+    args = parser.parse_args()
+    
     script_dir = Path(__file__).parent
-    config_file = script_dir / "experiment.json"
-    output_dir = script_dir / "output"
+    config_file = script_dir / args.config
+    output_dir = Path(args.output_dir)
     
     # Create output directory
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Ensure wrk.lua is available
     # ensure_wrk_lua_available(script_dir)
@@ -174,7 +209,7 @@ def main():
         return
     
     # Validate required fields
-    required_fields = ['connections', 'threads', 'start_rate', 'stop_rate', 'step', 'duration']
+    required_fields = ['connections', 'threads', 'range', 'duration']
     missing_fields = [field for field in required_fields if field not in config]
     if missing_fields:
         print(f"Error: Missing required fields in config: {missing_fields}")
@@ -207,18 +242,23 @@ def main():
     print(f"Target URL: {url}")
     print(f"Configuration: {config}")
     
+    # Parse rate ranges
+    rates = parse_ranges(config['range'])
+    if not rates:
+        print("Error: No valid rates found in range specification")
+        return
+    
+    print(f"Testing rates: {rates}")
+    
     # Run experiments
     results = []
-    current_rate = config['start_rate']
-    
-    while current_rate <= config['stop_rate']:
-        result = run_experiment(config, current_rate, webclient_path, url, output_dir)
+    for rate in rates:
+        result = run_experiment(config, rate, webclient_path, url, output_dir)
         results.append(result)
-        current_rate += config['step']
     
     # Generate CSV output
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_file = script_dir / f"experiment_results_{timestamp}.csv"
+    csv_file = output_dir / f"experiment_results_{timestamp}.csv"
     
     print(f"\nWriting results to {csv_file}")
     

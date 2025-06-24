@@ -36,7 +36,7 @@ def setup_gnuplot_style():
         'axes.facecolor': 'white'
     })
 
-def plot_all_latencies(df, output_prefix="latency_plot"):
+def plot_all_latencies(df, output_dir, output_prefix="latency_plot"):
     """Plot all latency metrics on a single figure"""
     setup_gnuplot_style()
     
@@ -74,19 +74,19 @@ def plot_all_latencies(df, output_prefix="latency_plot"):
     
     # Set origin at (0,0) and auto limits
     ax.set_xlim(left=0)
-    ax.set_ylim(bottom=0)
-    ax.autoscale()
+    ax.set_ylim([0,200])
+    # ax.autoscale()
     
     plt.tight_layout()
     
     # Save the plot
-    output_file = f"{output_prefix}_all.png"
+    output_file = output_dir / f"{output_prefix}_all.png"
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"Saved plot: {output_file}")
     
     plt.show()
 
-def plot_single_percentile(df, percentile, output_prefix="latency_plot"):
+def plot_single_percentile(df, percentile, output_dir, output_prefix="latency_plot"):
     """Plot a specific percentile for corrected and uncorrected measurements"""
     setup_gnuplot_style()
     
@@ -130,21 +130,23 @@ def plot_single_percentile(df, percentile, output_prefix="latency_plot"):
     ax.grid(True, alpha=0.3)
     
     # Set origin at (0,0) and auto limits
-    ax.set_xlim(left=0)
-    ax.set_ylim(bottom=0)
-    ax.autoscale()
+    # ax.set_xlim(left=0)
+    # ax.set_ylim(bottom=0)
+    ax.set_xlim([0,100000])
+    ax.set_ylim([0,100])
+    # ax.autoscale()  
     
     plt.tight_layout()
     
     # Save the plot
     percentile_str = str(percentile).replace('.', '_')
-    output_file = f"{output_prefix}_p{percentile_str}.png"
+    output_file = output_dir / f"{output_prefix}_p{percentile_str}.png"
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"Saved plot: {output_file}")
     
     plt.show()
 
-def plot_combined_latency(df, output_prefix="latency_plot"):
+def plot_combined_latency(df, output_dir, output_prefix="latency_plot"):
     """Plot all latency percentiles on a single chart"""
     setup_gnuplot_style()
     
@@ -200,13 +202,13 @@ def plot_combined_latency(df, output_prefix="latency_plot"):
     plt.tight_layout()
     
     # Save the plot
-    output_file = f"{output_prefix}_combined.png"
+    output_file = output_dir / f"{output_prefix}_combined.png"
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"Saved plot: {output_file}")
     
     plt.show()
 
-def plot_throughput_vs_target(df, output_prefix="latency_plot"):
+def plot_throughput_vs_target(df, output_dir, output_prefix="latency_plot"):
     """Plot actual throughput vs target rate"""
     setup_gnuplot_style()
     
@@ -241,7 +243,7 @@ def plot_throughput_vs_target(df, output_prefix="latency_plot"):
     plt.tight_layout()
     
     # Save the plot
-    output_file = f"{output_prefix}_throughput.png"
+    output_file = output_dir / f"{output_prefix}_throughput.png"
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"Saved plot: {output_file}")
     
@@ -250,6 +252,7 @@ def plot_throughput_vs_target(df, output_prefix="latency_plot"):
 def main():
     parser = argparse.ArgumentParser(description='Plot latency curves from experiment results')
     parser.add_argument('csv_file', help='CSV file with experiment results')
+    parser.add_argument('output_dir', help='Output directory for plots')
     parser.add_argument('-o', '--output', default='latency_plot', 
                         help='Output file prefix (default: latency_plot)')
     parser.add_argument('-p', '--percentile', type=float, choices=[50, 99, 99.9], 
@@ -262,6 +265,10 @@ def main():
                         help='Plot all percentiles (corrected and uncorrected) in single figure')
     
     args = parser.parse_args()
+    
+    # Create output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Check if file exists
     csv_path = Path(args.csv_file)
@@ -287,17 +294,17 @@ def main():
     
     # Generate plots based on arguments
     if args.percentile is not None:
-        plot_single_percentile(df_success, args.percentile, args.output)
+        plot_single_percentile(df_success, args.percentile, output_dir, args.output)
     elif args.all:
-        plot_all_latencies(df_success, args.output)
+        plot_all_latencies(df_success, output_dir, args.output)
     elif args.combined:
         print("Warning: --combined is deprecated, use --all instead")
-        plot_combined_latency(df_success, args.output)
+        plot_combined_latency(df_success, output_dir, args.output)
     elif args.throughput:
-        plot_throughput_vs_target(df_success, args.output)
+        plot_throughput_vs_target(df_success, output_dir, args.output)
     else:
         # Default: plot all latencies in single figure
-        plot_all_latencies(df_success, args.output)
+        plot_all_latencies(df_success, output_dir, args.output)
     
     # Print summary statistics
     print("\nSummary Statistics:")
