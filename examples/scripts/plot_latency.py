@@ -130,10 +130,10 @@ def plot_single_percentile(df, percentile, output_dir, output_prefix="latency_pl
     ax.grid(True, alpha=0.3)
     
     # Set origin at (0,0) and auto limits
-    # ax.set_xlim(left=0)
-    # ax.set_ylim(bottom=0)
-    ax.set_xlim([0,100000])
-    ax.set_ylim([0,100])
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    # ax.set_xlim([0,100000])
+    # ax.set_ylim([0,100])
     # ax.autoscale()  
     
     plt.tight_layout()

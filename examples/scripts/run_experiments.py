@@ -216,24 +216,37 @@ def main():
         return
     
     # Find webclient binary
-    webclient_paths = [
-        script_dir / "../../release_build/examples/webclient/webclient",
-        script_dir / "webclient/webclient",
-        script_dir / "../../build/examples/webclient/webclient"
-    ]
-    
     webclient_path = None
-    for path in webclient_paths:
-        if path.exists():
-            webclient_path = path
-            break
     
-    if not webclient_path:
-        print("Error: Could not find webclient binary")
-        print("Looked for:")
+    # Check if binary_path is specified in config
+    if 'binary_path' in config:
+        webclient_path = Path(config['binary_path'])
+        if not webclient_path.exists():
+            print(f"Error: Specified binary path does not exist: {webclient_path}")
+            return
+        if not webclient_path.is_file():
+            print(f"Error: Specified binary path is not a file: {webclient_path}")
+            return
+    else:
+        # Fall back to searching default paths
+        webclient_paths = [
+            script_dir / "../../release_build/examples/webclient/webclient",
+            script_dir / "webclient/webclient",
+            script_dir / "../../build/examples/webclient/webclient"
+        ]
+        
         for path in webclient_paths:
-            print(f"  {path}")
-        return
+            if path.exists():
+                webclient_path = path
+                break
+        
+        if not webclient_path:
+            print("Error: Could not find webclient binary")
+            print("Looked for:")
+            for path in webclient_paths:
+                print(f"  {path}")
+            print("\nAlternatively, specify 'binary_path' in your config file")
+            return
     
     # Default URL (can be overridden in config)
     url = config.get('url', 'http://10.10.1.1:8000/index.html')
