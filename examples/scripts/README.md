@@ -39,23 +39,24 @@ python3 run_experiments.py /home/user/load_tests
 ```
 
 ### `plot_latency.py`
-Generates load-latency plots from experiment CSV results.
+Generates load-latency plots from experiment CSV results. Supports both single CSV files and JSON configuration for comparing multiple datasets.
 
 **Usage:**
 ```bash
-python3 plot_latency.py <csv_file> <output_dir> [options]
+python3 plot_latency.py <input_file> <output_dir> [options]
 ```
 
 **Arguments:**
-- `csv_file`: Required. CSV file with experiment results
+- `input_file`: Required. CSV file with experiment results OR JSON configuration file
 - `output_dir`: Required. Directory where plot images will be saved
 - `-o, --output`: Output file prefix (default: latency_plot)
 - `-p, --percentile`: Plot specific percentile only (50, 99, or 99.9)
 - `--all`: Plot all percentiles in single figure (default)
 - `--combined`: Plot side-by-side corrected vs uncorrected (deprecated)
 - `--throughput`: Plot throughput comparison
+- `--json`: Force treat input as JSON configuration file
 
-**Examples:**
+**Single CSV Examples:**
 ```bash
 # Default: All latencies in single plot
 python3 plot_latency.py results/experiment_results_20250623_123456.csv ./plots
@@ -65,14 +66,23 @@ python3 plot_latency.py results/experiment_results_20250623_123456.csv ./plots -
 
 # Plot throughput comparison
 python3 plot_latency.py results/experiment_results_20250623_123456.csv ./plots --throughput
+```
 
-# Custom output prefix
-python3 plot_latency.py results/experiment_results_20250623_123456.csv ./plots -o my_analysis
+**Multi-Dataset Comparison Examples:**
+```bash
+# Compare multiple datasets using JSON config
+python3 plot_latency.py plot.json ./plots
+
+# Compare P99 latencies from multiple datasets
+python3 plot_latency.py plot.json ./plots -p 99
+
+# Custom output prefix for comparison
+python3 plot_latency.py plot.json ./plots -o machnet_vs_http
 ```
 
 ## Configuration Format
 
-### `experiment.json`
+### `experiment.json` (for run_experiments.py)
 ```json
 {
     "binary_path": "....",
@@ -90,6 +100,29 @@ python3 plot_latency.py results/experiment_results_20250623_123456.csv ./plots -
 **Range Format:** `"start:stop:step"`
 - Multiple ranges are supported and will be combined
 - Example: `["10:50:10", "100:500:100"]` generates rates: 10,20,30,40,50,100,200,300,400,500
+
+### `plot.json` (for plot_latency.py comparison plots)
+```json
+{
+    "HTTP": "output_http/experiment_results_20250624_161645.csv",
+    "Machnet": "output_machnet/experiment_results_20250624_011645.csv"
+}
+```
+
+**Alternative format:**
+```json
+[
+    "HTTP:output_http/experiment_results_20250624_161645.csv",
+    "Machnet:output_machnet/experiment_results_20250624_011645.csv"
+]
+```
+
+**JSON Configuration Rules:**
+- Dictionary format: `{"caption": "csv_file.csv"}`
+- List format: `["caption:csv_file.csv"]`
+- File paths are relative to the JSON file location
+- Absolute paths are also supported
+- Only successful experiments from each CSV are plotted
 
 ## Output Files
 
