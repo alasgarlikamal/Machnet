@@ -91,6 +91,12 @@ char *format_time_us(long double n) {
     return format_units(n, units, 2);
 }
 
+char *format_time_us_only(long double n) {
+    char *msg = NULL;
+    aprintf(&msg, "%.2Lfus", n);
+    return msg;
+}
+
 char *format_time_s(long double n) {
     return format_units(n, &time_units_s, 0);
 }

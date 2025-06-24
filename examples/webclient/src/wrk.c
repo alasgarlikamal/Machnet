@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
   latency_stats->histogram = latency_histogram;
 
   print_stats_header();
-  print_stats("Latency", latency_stats, format_time_us);
+  print_stats("Latency", latency_stats, format_time_us_only);
   print_stats("Req/Sec", statistics.requests, format_metric);
   //    if (cfg.latency) print_stats_latency(latency_stats);
 
@@ -919,11 +919,11 @@ static void print_hdr_latency(struct hdr_histogram *histogram,
     long double p = percentiles[i];
     int64_t n = hdr_value_at_percentile(histogram, p);
     printf("%7.3Lf%%", p);
-    print_units(n, format_time_us, 10);
+    print_units(n, format_time_us_only, 10);
     printf("\n");
   }
   printf("\n%s\n", "  Detailed Percentile spectrum:");
-  hdr_percentiles_print(histogram, stdout, 5, 1000.0, CLASSIC);
+  hdr_percentiles_print(histogram, stdout, 5, 1.0, CLASSIC);
 }
 
 static void print_stats_latency(stats *stats) {
@@ -934,7 +934,7 @@ static void print_stats_latency(stats *stats) {
     long double p = percentiles[i];
     uint64_t n = stats_percentile(stats, p);
     printf("%7.3Lf%%", p);
-    print_units(n, format_time_us, 10);
+    print_units(n, format_time_us_only, 10);
     printf("\n");
   }
 }
