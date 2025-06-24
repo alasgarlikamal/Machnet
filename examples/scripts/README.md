@@ -1,3 +1,17 @@
+## Machnet Running Web Server/Client
+
+For now, webserver needs a `web_root` directory and `index.html` file there to serve - TODO: find a workaround for this.
+
+
+## Running HTTP over TCP
+### Client
+- Get wrk2 with `git clone https://github.com/giltene/wrk2.git` and apply [patch](../webclient/usec.patch) as `git apply usec.patch`
+	- Patch changes all output to microseconds to be consistent with plotting and running experiments
+- Build with `make`, later use the binary path in experiment configuration file.
+### Server
+- Get mongoose with `git clone https://github.com/cesanta/mongoose.git` and use [http_server](https://github.com/cesanta/mongoose/tree/master/tutorials/http/http-server) 
+- Build with `make` and run. Make sure that you have empty index.html file in the same folder to serve.
+
 ## Scripts
 
 ### `run_experiments.py`
@@ -61,6 +75,7 @@ python3 plot_latency.py results/experiment_results_20250623_123456.csv ./plots -
 ### `experiment.json`
 ```json
 {
+    "binary_path": "....",
     "connections": 1,
     "threads": 1,
     "range": [
