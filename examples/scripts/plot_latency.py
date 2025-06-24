@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import argparse
 import sys
+import json
 from pathlib import Path
 
 def setup_gnuplot_style():
@@ -36,8 +37,55 @@ def setup_gnuplot_style():
         'axes.facecolor': 'white'
     })
 
-def plot_all_latencies(df, output_dir, output_prefix="latency_plot"):
-    """Plot all latency metrics on a single figure"""
+def plot_all_latencies(datasets, output_dir, output_prefix="latency_plot"):
+    """Plot all latency metrics on a single figure for multiple datasets"""
+    setup_gnuplot_style()
+    
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    
+    # Define colors and line styles (gnuplot-like)
+    colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf']
+    markers = ['o', 's', '^', 'v', 'd', '<', '>', 'p']
+    
+    dataset_idx = 0
+    for caption, df in datasets.items():
+        color_offset = dataset_idx * 2 % len(colors)
+        marker_offset = dataset_idx % len(markers)
+        
+        # Plot corrected P99 (primary metric)
+        ax.plot(df['rate'], df['corrected_p99'], color=colors[color_offset], linestyle='-', 
+                marker=markers[marker_offset], label=f'{caption}', 
+                markerfacecolor='white', markeredgecolor=colors[color_offset])
+        
+        # Plot uncorrected P99 (for comparison)
+        ax.plot(df['rate'], df['uncorrected_p99'], color=colors[color_offset], linestyle='--', 
+                marker=markers[marker_offset], label=f'{caption}', 
+                markerfacecolor='white', markeredgecolor=colors[color_offset], alpha=0.7)
+        
+        dataset_idx += 1
+    
+    ax.set_xlabel('Load (requests/sec)')
+    ax.set_ylabel('Latency (μs)')
+    ax.set_title('Load-Latency Comparison (P99)')
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.grid(True, alpha=0.3)
+    
+    # Set origin at (0,0) and auto limits
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    ax.autoscale()
+    
+    plt.tight_layout()
+    
+    # Save the plot
+    output_file = output_dir / f"{output_prefix}_comparison.png"
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    print(f"Saved plot: {output_file}")
+    
+    plt.show()
+
+def plot_all_latencies_single(df, output_dir, output_prefix="latency_plot"):
+    """Plot all latency metrics on a single figure for a single dataset"""
     setup_gnuplot_style()
     
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
@@ -249,9 +297,76 @@ def plot_throughput_vs_target(df, output_dir, output_prefix="latency_plot"):
     
     plt.show()
 
+def load_datasets_from_json(json_file, base_dir=None):
+    """Load datasets from a plot.json configuration file"""
+    json_path = Path(json_file)
+    if base_dir is None:
+        base_dir = json_path.parent
+    
+    try:
+        with open(json_path, 'r') as f:
+            config = json.load(f)
+    except Exception as e:
+        print(f"Error reading JSON file {json_file}: {e}")
+        sys.exit(1)
+    
+    datasets = {}
+    
+    # Handle different JSON formats
+    if isinstance(config, dict):
+        # Format: {"caption1": "file1.csv", "caption2": "file2.csv"}
+        for caption, csv_file in config.items():
+            csv_path = base_dir / csv_file if not Path(csv_file).is_absolute() else Path(csv_file)
+            
+            if not csv_path.exists():
+                print(f"Warning: CSV file {csv_path} not found, skipping {caption}")
+                continue
+            
+            try:
+                df = pd.read_csv(csv_path)
+                df_success = df[df['success'] == True].copy()
+                if len(df_success) > 0:
+                    datasets[caption] = df_success
+                    print(f"Loaded {len(df_success)} successful experiments for '{caption}' from {csv_file}")
+                else:
+                    print(f"Warning: No successful experiments found in {csv_file}")
+            except Exception as e:
+                print(f"Error loading {csv_file}: {e}")
+    
+    elif isinstance(config, list):
+        # Format: ["caption1:file1.csv", "caption2:file2.csv"]
+        for entry in config:
+            if ':' not in entry:
+                print(f"Warning: Invalid entry format '{entry}', expected 'caption:file.csv'")
+                continue
+                
+            caption, csv_file = entry.split(':', 1)
+            csv_path = base_dir / csv_file if not Path(csv_file).is_absolute() else Path(csv_file)
+            
+            if not csv_path.exists():
+                print(f"Warning: CSV file {csv_path} not found, skipping {caption}")
+                continue
+            
+            try:
+                df = pd.read_csv(csv_path)
+                df_success = df[df['success'] == True].copy()
+                if len(df_success) > 0:
+                    datasets[caption] = df_success
+                    print(f"Loaded {len(df_success)} successful experiments for '{caption}' from {csv_file}")
+                else:
+                    print(f"Warning: No successful experiments found in {csv_file}")
+            except Exception as e:
+                print(f"Error loading {csv_file}: {e}")
+    
+    if not datasets:
+        print("No valid datasets found in JSON configuration")
+        sys.exit(1)
+    
+    return datasets
+
 def main():
     parser = argparse.ArgumentParser(description='Plot latency curves from experiment results')
-    parser.add_argument('csv_file', help='CSV file with experiment results')
+    parser.add_argument('input_file', help='CSV file with experiment results or JSON configuration file')
     parser.add_argument('output_dir', help='Output directory for plots')
     parser.add_argument('-o', '--output', default='latency_plot', 
                         help='Output file prefix (default: latency_plot)')
@@ -263,6 +378,8 @@ def main():
                         help='Plot throughput comparison')
     parser.add_argument('--all', action='store_true',
                         help='Plot all percentiles (corrected and uncorrected) in single figure')
+    parser.add_argument('--json', action='store_true',
+                        help='Input file is a JSON configuration file')
     
     args = parser.parse_args()
     
@@ -271,48 +388,116 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Check if file exists
-    csv_path = Path(args.csv_file)
-    if not csv_path.exists():
-        print(f"Error: File {args.csv_file} not found")
+    input_path = Path(args.input_file)
+    if not input_path.exists():
+        print(f"Error: File {args.input_file} not found")
         sys.exit(1)
     
-    # Read the data
-    try:
-        df = pd.read_csv(csv_path)
-        print(f"Loaded {len(df)} data points from {args.csv_file}")
-    except Exception as e:
-        print(f"Error reading CSV file: {e}")
-        sys.exit(1)
+    # Determine file type
+    is_json = args.json or input_path.suffix.lower() == '.json'
     
-    # Filter successful experiments only
-    df_success = df[df['success'] == True].copy()
-    if len(df_success) == 0:
-        print("No successful experiments found in the data")
-        sys.exit(1)
+    if is_json:
+        # Load multiple datasets from JSON configuration
+        datasets = load_datasets_from_json(args.input_file)
+        
+        # Generate comparison plots
+        if args.percentile is not None:
+            # Plot specific percentile for all datasets
+            setup_gnuplot_style()
+            fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+            
+            colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf']
+            markers = ['o', 's', '^', 'v', 'd', '<', '>', 'p']
+            
+            # Map percentile to column names
+            if args.percentile == 50:
+                corrected_col = 'corrected_p50'
+                title_suffix = 'P50 (Median)'
+            elif args.percentile == 99:
+                corrected_col = 'corrected_p99'
+                title_suffix = 'P99'
+            elif args.percentile == 99.9:
+                corrected_col = 'corrected_p99_9'
+                title_suffix = 'P99.9'
+            
+            dataset_idx = 0
+            for caption, df in datasets.items():
+                color = colors[dataset_idx % len(colors)]
+                marker = markers[dataset_idx % len(markers)]
+                
+                ax.plot(df['rate'], df[corrected_col], color=color, linestyle='-', 
+                        marker=marker, label=caption, 
+                        markerfacecolor='white', markeredgecolor=color)
+                dataset_idx += 1
+            
+            ax.set_xlabel('Load (requests/sec)')
+            ax.set_ylabel('Latency (μs)')
+            ax.set_title(f'{title_suffix} Latency Comparison')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            ax.set_xlim(left=0)
+            ax.set_ylim(bottom=0)
+            ax.autoscale()
+            
+            plt.tight_layout()
+            
+            percentile_str = str(args.percentile).replace('.', '_')
+            output_file = output_dir / f"{args.output}_p{percentile_str}_comparison.png"
+            plt.savefig(output_file, dpi=300, bbox_inches='tight')
+            print(f"Saved plot: {output_file}")
+            plt.show()
+            
+        elif args.all:
+            plot_all_latencies(datasets, output_dir, args.output)
+        else:
+            # Default: plot P99 comparison
+            plot_all_latencies(datasets, output_dir, args.output)
+        
+        # Print summary for all datasets
+        print("\nSummary Statistics for all datasets:")
+        for caption, df in datasets.items():
+            print(f"\n{caption}:")
+            print(f"  Rate range: {df['rate'].min():.0f} - {df['rate'].max():.0f} req/sec")
+            print(f"  P99 range: {df['corrected_p99'].min():.1f} - {df['corrected_p99'].max():.1f} μs")
     
-    print(f"Using {len(df_success)} successful experiments")
-    
-    # Generate plots based on arguments
-    if args.percentile is not None:
-        plot_single_percentile(df_success, args.percentile, output_dir, args.output)
-    elif args.all:
-        plot_all_latencies(df_success, output_dir, args.output)
-    elif args.combined:
-        print("Warning: --combined is deprecated, use --all instead")
-        plot_combined_latency(df_success, output_dir, args.output)
-    elif args.throughput:
-        plot_throughput_vs_target(df_success, output_dir, args.output)
     else:
-        # Default: plot all latencies in single figure
-        plot_all_latencies(df_success, output_dir, args.output)
-    
-    # Print summary statistics
-    print("\nSummary Statistics:")
-    print(f"Rate range: {df_success['rate'].min():.0f} - {df_success['rate'].max():.0f} req/sec")
-    print(f"Corrected latency range:")
-    print(f"  Average: {df_success['corrected_avg'].min():.1f} - {df_success['corrected_avg'].max():.1f} μs")
-    print(f"  P99: {df_success['corrected_p99'].min():.1f} - {df_success['corrected_p99'].max():.1f} μs")
-    print(f"  P99.9: {df_success['corrected_p99_9'].min():.1f} - {df_success['corrected_p99_9'].max():.1f} μs")
+        # Single CSV file mode (original behavior)
+        try:
+            df = pd.read_csv(input_path)
+            print(f"Loaded {len(df)} data points from {args.input_file}")
+        except Exception as e:
+            print(f"Error reading CSV file: {e}")
+            sys.exit(1)
+        
+        # Filter successful experiments only
+        df_success = df[df['success'] == True].copy()
+        if len(df_success) == 0:
+            print("No successful experiments found in the data")
+            sys.exit(1)
+        
+        print(f"Using {len(df_success)} successful experiments")
+        
+        # Generate plots based on arguments
+        if args.percentile is not None:
+            plot_single_percentile(df_success, args.percentile, output_dir, args.output)
+        elif args.all:
+            plot_all_latencies_single(df_success, output_dir, args.output)
+        elif args.combined:
+            print("Warning: --combined is deprecated, use --all instead")
+            plot_combined_latency(df_success, output_dir, args.output)
+        elif args.throughput:
+            plot_throughput_vs_target(df_success, output_dir, args.output)
+        else:
+            # Default: plot all latencies in single figure
+            plot_all_latencies_single(df_success, output_dir, args.output)
+        
+        # Print summary statistics
+        print("\nSummary Statistics:")
+        print(f"Rate range: {df_success['rate'].min():.0f} - {df_success['rate'].max():.0f} req/sec")
+        print(f"Corrected latency range:")
+        print(f"  Average: {df_success['corrected_avg'].min():.1f} - {df_success['corrected_avg'].max():.1f} μs")
+        print(f"  P99: {df_success['corrected_p99'].min():.1f} - {df_success['corrected_p99'].max():.1f} μs")
+        print(f"  P99.9: {df_success['corrected_p99_9'].min():.1f} - {df_success['corrected_p99_9'].max():.1f} μs")
 
 if __name__ == "__main__":
     main() 
