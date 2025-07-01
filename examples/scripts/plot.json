@@ -1,6 +1,10 @@
 {
-    "HTTP-c1-t1": "output_http/experiment_results_20250624_161645.csv",
-    "HTTP-c32-t1": "output_http_c32_t1/experiment_results_20250624_200217.csv",
-    "HTTP-c256-t8": "output_http_c256_t8/experiment_results_20250624_194350.csv",
-    "Machnet": "output_machnet/experiment_results_20250624_011632.csv"
-}
+    "Machnet CloudLab": "data/machnet_cloudlab/experiment_results_20250701_210637.csv",
+    "Machnet Azure": "data/machnet_azure/results_plot.csv",
+    "HTTP C1T1 CloudLab": "data/http_c1t1_cloudlab/experiment_results_20250701_211316.csv",
+    "HTTP C1T1 Azure": "data/http_c1t1_azure/experiment_results_20250630_223401.csv",
+    "HTTP C32T1 CloudLab": "data/http_c32t1_cloudlab/experiment_results_20250701_211920.csv",
+    "HTTP C32T1 Azure": "data/http_c32t1_azure/experiment_results_20250630_225718.csv",
+    "HTTP C256T8 CloudLab": "data/http_c256t8_cloudlab/experiment_results_20250701_215126.csv",
+    "HTTP C256T8 Azure": "data/http_c256t8_azure/experiment_results_20250630_230459.csv"
+    }

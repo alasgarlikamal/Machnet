@@ -79,14 +79,15 @@ def get_column_name(percentile, correction_type):
         raise ValueError("percentile must be 50, 99, 99.9, or 'avg'")
 
 def plot_comparison(df_http, df_machnet, percentile, correction_type, output_dir, output_prefix="latency_comparison", log_scale=False):
-    """Plot comparison of latency curves between HTTP and MachNet"""
+    """Plot comparison of latency curves between HTTP and Machnet"""
     setup_gnuplot_style()
     
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
     
-    # Define colors and markers
-    colors = ['#e41a1c', '#377eb8']  # Red for HTTP, Blue for MachNet
+    # Define colors and markers - using high contrast, colorblind-friendly palette
+    colors = ['#d62728', '#1f77b4']  # Bright red for HTTP, Bright blue for MachNet
     markers = ['o', 's']
+    line_styles = ['-', '--']
     
     # Get column name for the specified percentile and correction type
     column_name = get_column_name(percentile, correction_type)
@@ -105,15 +106,15 @@ def plot_comparison(df_http, df_machnet, percentile, correction_type, output_dir
     
     # Plot HTTP data
     ax.plot(df_http_success['actual_req_sec'], df_http_success[column_name], 
-            color=colors[0], linestyle='-', marker=markers[0], 
-            label=f'HTTP', 
-            markerfacecolor='white', markeredgecolor=colors[0])
+            color=colors[0], linestyle=line_styles[0], marker=markers[0], 
+            label=f'HTTP', linewidth=2.5, markersize=8,
+            markerfacecolor='white', markeredgecolor=colors[0], markeredgewidth=2)
     
     # Plot MachNet data
     ax.plot(df_machnet_success['actual_req_sec'], df_machnet_success[column_name], 
-            color=colors[1], linestyle='-', marker=markers[1], 
-            label=f'Machnet', 
-            markerfacecolor='white', markeredgecolor=colors[1])
+            color=colors[1], linestyle=line_styles[1], marker=markers[1], 
+            label=f'Machnet', linewidth=2.5, markersize=8,
+            markerfacecolor='white', markeredgecolor=colors[1], markeredgewidth=2)
     
     # Set labels and title
     ax.set_xlabel('Load (requests/sec)')
@@ -129,7 +130,7 @@ def plot_comparison(df_http, df_machnet, percentile, correction_type, output_dir
         title_suffix = 'P99.9'
     
     ax.set_title(f'{title_suffix} Latency Comparison: HTTP vs Machnet ({correction_type.title()})')
-    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.legend(bbox_to_anchor=(0.5, 1), loc='upper left')
     ax.grid(True, alpha=0.3)
     
     # Set x-axis limits
@@ -177,9 +178,9 @@ def plot_multiple_percentiles(df_http, df_machnet, correction_type, output_dir, 
     
     fig, ax = plt.subplots(1, 1, figsize=(14, 8))
     
-    # Define colors and styles
-    http_color = '#e41a1c'  # Red
-    machnet_color = '#377eb8'  # Blue
+    # Define colors and styles - using high contrast, colorblind-friendly palette
+    http_color = '#d62728'  # Bright red
+    machnet_color = '#1f77b4'  # Bright blue
     percentiles = [('avg', 'Average'), (50, 'P50'), (99, 'P99'), (99.9, 'P99.9')]
     line_styles = ['-', '--', '-.', ':']
     markers = ['o', 's', '^', 'v']
@@ -194,16 +195,18 @@ def plot_multiple_percentiles(df_http, df_machnet, correction_type, output_dir, 
         column_name = get_column_name(percentile, correction_type)
         ax.plot(df_http_success['actual_req_sec'], df_http_success[column_name], 
                 color=http_color, linestyle=line_styles[i], marker=markers[i], 
-                label=f'HTTP {label}', markerfacecolor='white', markeredgecolor=http_color,
-                alpha=0.8)
+                label=f'HTTP {label}', linewidth=2.5, markersize=8,
+                markerfacecolor='white', markeredgecolor=http_color, markeredgewidth=2,
+                alpha=0.9)
     
     # Plot MachNet data
     for i, (percentile, label) in enumerate(percentiles):
         column_name = get_column_name(percentile, correction_type)
         ax.plot(df_machnet_success['actual_req_sec'], df_machnet_success[column_name], 
                 color=machnet_color, linestyle=line_styles[i], marker=markers[i], 
-                label=f'Machnet {label}', markerfacecolor='white', markeredgecolor=machnet_color,
-                alpha=0.8)
+                label=f'Machnet {label}', linewidth=2.5, markersize=8,
+                markerfacecolor='white', markeredgecolor=machnet_color, markeredgewidth=2,
+                alpha=0.9)
     
     ax.set_xlabel('Load (requests/sec)')
     ax.set_ylabel('Latency (μs)')
@@ -311,9 +314,10 @@ def plot_comparison_multi(datasets, percentile, correction_type, output_dir, out
     
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
     
-    # Define colors and markers
-    colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf']
+    # Define colors and markers - using high contrast, colorblind-friendly palette
+    colors = ['#d62728', '#1f77b4', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b', '#e377c2', '#17becf']
     markers = ['o', 's', '^', 'v', 'd', '<', '>', 'p']
+    line_styles = ['-', '--', '-.', ':', '-', '--', '-.', ':']
     
     # Get column name for the specified percentile and correction type
     column_name = get_column_name(percentile, correction_type)
@@ -323,11 +327,19 @@ def plot_comparison_multi(datasets, percentile, correction_type, output_dir, out
         color = colors[dataset_idx % len(colors)]
         marker = markers[dataset_idx % len(markers)]
         
+        # Determine line style based on dataset name
+        if 'azure' in caption.lower():
+            line_style = '--'  # Dashed for Azure
+        elif 'cloudlab' in caption.lower():
+            line_style = '-'   # Solid for Cloudlab
+        else:
+            line_style = line_styles[dataset_idx % len(line_styles)]  # Default cycling
+        
         # Plot dataset
         ax.plot(df['actual_req_sec'], df[column_name], 
-                color=color, linestyle='-', marker=marker, 
-                label=f'{caption}', 
-                markerfacecolor='white', markeredgecolor=color)
+                color=color, linestyle=line_style, marker=marker, 
+                label=f'{caption}', linewidth=2.5, markersize=8,
+                markerfacecolor='white', markeredgecolor=color, markeredgewidth=2)
         
         dataset_idx += 1
     
@@ -345,7 +357,7 @@ def plot_comparison_multi(datasets, percentile, correction_type, output_dir, out
         title_suffix = 'P99.9'
     
     ax.set_title(f'{title_suffix} Latency Comparison ({correction_type.title()})')
-    ax.legend(bbox_to_anchor=(0.5, 1))
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     ax.grid(True, alpha=0.3)
     
     # Set x-axis limits
@@ -390,8 +402,8 @@ def plot_multiple_percentiles_multi(datasets, correction_type, output_dir, outpu
     
     fig, ax = plt.subplots(1, 1, figsize=(14, 8))
     
-    # Define base colors for datasets
-    base_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf']
+    # Define base colors for datasets - using high contrast, colorblind-friendly palette
+    base_colors = ['#d62728', '#1f77b4', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b', '#e377c2', '#17becf']
     percentiles = [('avg', 'Average'), (50, 'P50'), (99, 'P99'), (99.9, 'P99.9')]
     line_styles = ['-', '--', '-.', ':']
     markers = ['o', 's', '^', 'v']
@@ -400,13 +412,31 @@ def plot_multiple_percentiles_multi(datasets, correction_type, output_dir, outpu
     for caption, df in datasets.items():
         base_color = base_colors[dataset_idx % len(base_colors)]
         
+        # Determine base line style based on dataset name
+        if 'azure' in caption.lower():
+            base_line_style = '--'  # Dashed for Azure
+        elif 'cloudlab' in caption.lower():
+            base_line_style = '-'   # Solid for Cloudlab
+        else:
+            base_line_style = '-'   # Default to solid
+        
         # Plot all percentiles for this dataset
         for i, (percentile, label) in enumerate(percentiles):
             column_name = get_column_name(percentile, correction_type)
+            
+            # Modify line style for different percentiles while keeping Azure/Cloudlab distinction
+            if base_line_style == '--':  # Azure (dashed base)
+                percentile_line_styles = ['--', ':', '-.', (0, (3, 1, 1, 1))]  # Various dashed styles
+            else:  # Cloudlab (solid base)
+                percentile_line_styles = ['-', '--', '-.', ':']  # Standard styles
+            
+            current_line_style = percentile_line_styles[i % len(percentile_line_styles)]
+            
             ax.plot(df['actual_req_sec'], df[column_name], 
-                    color=base_color, linestyle=line_styles[i], marker=markers[i], 
-                    label=f'{caption} {label}', markerfacecolor='white', markeredgecolor=base_color,
-                    alpha=0.8)
+                    color=base_color, linestyle=current_line_style, marker=markers[i], 
+                    label=f'{caption} {label}', linewidth=2.5, markersize=8,
+                    markerfacecolor='white', markeredgecolor=base_color, markeredgewidth=2,
+                    alpha=0.9)
         
         dataset_idx += 1
     
