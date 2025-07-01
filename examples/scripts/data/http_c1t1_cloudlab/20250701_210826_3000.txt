@@ -1,0 +1,7 @@
+Command: /tmp/wrk2/wrk http://10.10.1.1:8000/index.html -c 1 -t 1 -R 3000 -d 10 -L -U
+Return code: 1
+STDOUT:
+
+STDERR:
+unable to connect to 10.10.1.1:8000 No route to host
+
