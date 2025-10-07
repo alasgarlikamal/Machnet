@@ -9,6 +9,10 @@ pub struct StatsInstance {
     pub rx_count: u64,
     pub rx_bytes: u64,
     pub err_tx_drops: u64,
+    pub guest_call_count: u64,
+    pub guest_call_total_us: u64,
+    pub guest_call_min_us: u64,
+    pub guest_call_max_us: u64,
 }
 
 impl StatsInstance {
@@ -19,6 +23,10 @@ impl StatsInstance {
             rx_count: 0,
             rx_bytes: 0,
             err_tx_drops: 0,
+            guest_call_count: 0,
+            guest_call_total_us: 0,
+            guest_call_min_us: u64::MAX,
+            guest_call_max_us: 0,
         }
     }
 }
@@ -62,9 +70,24 @@ pub fn report_stats(stats: &mut Stats) {
             drop_stats_str.push_str(format!(", TX drops: {}", msg_dropped).as_str())
         }
 
+        // Guest call statistics
+        let guest_calls = cur.guest_call_count - prev.guest_call_count;
+        let guest_call_str = if guest_calls > 0 {
+            let total_us = cur.guest_call_total_us - prev.guest_call_total_us;
+            let avg_us = total_us as f64 / guest_calls as f64;
+            let min_us = cur.guest_call_min_us;
+            let max_us = cur.guest_call_max_us;
+            format!(
+                ", Guest calls: {} (avg: {:.1}us, min: {}us, max: {}us)",
+                guest_calls, avg_us, min_us, max_us
+            )
+        } else {
+            String::new()
+        };
+
         info!(
-            "TX/RX (msg/sec, Gbps): ({:.1}K/{:.1}K, {:.3}/{:.3}). {}",
-            tx_kmps, rx_kmps, tx_gbps, rx_gbps, drop_stats_str
+            "TX/RX (msg/sec, Gbps): ({:.1}K/{:.1}K, {:.3}/{:.3}){}{}",
+            tx_kmps, rx_kmps, tx_gbps, rx_gbps, drop_stats_str, guest_call_str
         );
 
         stats.last_measurement_time = now;
