@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use log::info;
+use log::debug;
 
 #[derive(Debug, Clone, Copy)]
 pub struct StatsInstance {
@@ -62,7 +62,7 @@ pub fn report_stats(stats: &mut Stats) {
             drop_stats_str.push_str(format!(", TX drops: {}", msg_dropped).as_str())
         }
 
-        info!(
+        debug!(
             "TX/RX (msg/sec, Gbps): ({:.1}K/{:.1}K, {:.3}/{:.3}). {}",
             tx_kmps, rx_kmps, tx_gbps, rx_gbps, drop_stats_str
         );
