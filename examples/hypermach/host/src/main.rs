@@ -155,9 +155,8 @@ async fn server<'a>(
         let start_time = Instant::now();
         let tx_message = match comm_style {
             CommStyle::Broadcast => {
-                // Send to all guests in parallel using async tasks
-                // If guests <= CPUs: each guest gets its own blocking thread
-                // If guests > CPUs: Tokio's thread pool schedules tasks across available threads
+                // Send to all guests in parallel as tasks on the fixed thread pool
+                // No new threads are spawned - tasks are scheduled on existing worker threads
                 let rx_msg_clone = rx_message.clone();
                 let mut tasks = vec![];
 
@@ -165,10 +164,12 @@ async fn server<'a>(
                     let ctx_clone = Arc::clone(ctx);
                     let msg_clone = rx_msg_clone.clone();
 
-                    // Each spawn_blocking spawns a task
-                    // Tokio will run up to num_blocking_threads tasks concurrently
-                    // Excess tasks queue until a thread becomes available
-                    let task = tokio::task::spawn_blocking(move || {
+                    // Use tokio::spawn (not spawn_blocking) to schedule on existing thread pool
+                    // Guest call is synchronous, so it will block the thread it runs on,
+                    // but no NEW thread is created - it uses one from the fixed pool
+                    let task = tokio::task::spawn(async move {
+                        // Run the blocking guest call in a task
+                        // This blocks one of the 63 worker threads but doesn't spawn a new thread
                         let mut guest_ctx = ctx_clone.lock().unwrap();
                         let guest_result = guest_ctx
                             .call(
@@ -188,7 +189,7 @@ async fn server<'a>(
                     tasks.push(task);
                 }
 
-                // Wait for ALL tasks to complete concurrently (not sequentially!)
+                // Wait for ALL tasks to complete concurrently
                 // join_all awaits all futures at once, enabling true parallelism
                 let responses: Vec<Vec<u8>> = join_all(tasks)
                     .await
@@ -210,7 +211,7 @@ async fn server<'a>(
                 let ctx_clone = Arc::clone(&guest_contexts[guest_idx]);
                 let msg_clone = rx_message.clone();
 
-                let response = tokio::task::spawn_blocking(move || {
+                let response = tokio::task::spawn(async move {
                     let mut guest_ctx = ctx_clone.lock().unwrap();
                     let guest_result = guest_ctx
                         .call(
@@ -239,7 +240,7 @@ async fn server<'a>(
                 let ctx_clone = Arc::clone(&guest_contexts[guest_idx]);
                 let msg_clone = rx_message.clone();
 
-                let response = tokio::task::spawn_blocking(move || {
+                let response = tokio::task::spawn(async move {
                     let mut guest_ctx = ctx_clone.lock().unwrap();
                     let guest_result = guest_ctx
                         .call(
@@ -308,67 +309,39 @@ fn main() -> Result<()> {
     // Get core IDs
     let core_ids = core_affinity::get_core_ids().unwrap();
 
-    // Worker thread: only CPU 1
-    let worker_core_id = core_ids[1].clone();
-    let num_worker_threads = 1;
-
-    // Blocking threads: CPUs 2 through N (skip CPU 0 and CPU 1)
-    let blocking_core_ids: Vec<_> = core_ids.iter().skip(2).cloned().collect();
-    let max_blocking_cpus = blocking_core_ids.len();
-    let num_guests = args.num_guests();
-
-    // Cap blocking threads at available CPUs
-    // If guests <= CPUs: use 1 thread per guest
-    // If guests > CPUs: use all available CPUs as thread pool
-    let num_blocking_threads = num_guests.min(max_blocking_cpus);
+    // Fixed thread pool: SKIP CPU 0 (reserved), use CPUs 1 through N
+    let worker_core_ids: Vec<_> = core_ids.iter().skip(1).cloned().collect();
+    let num_worker_threads = worker_core_ids.len(); // All CPUs except CPU 0
 
     info!("Configuring Tokio runtime:");
-    info!("  Worker threads: {} (CPU 1 only)", num_worker_threads);
-    info!("  Number of guests: {}", num_guests);
-    info!("  Available CPUs for blocking pool: {} (CPUs 2-{})", max_blocking_cpus, num_cores - 1);
-    info!("  Blocking thread pool size: {}", num_blocking_threads);
+    info!("  Total CPUs on system: {}", num_cores);
+    info!("  CPU 0: RESERVED (not used)");
+    info!("  CPUs for thread pool: {} (CPUs 1-{})", num_worker_threads, num_cores - 1);
+    info!("  Fixed thread pool size: {}", num_worker_threads);
+    info!("  Number of guests: {}", args.num_guests());
+    info!("  Tasks will be scheduled on the fixed thread pool (no new thread spawning)");
 
-    if num_guests > max_blocking_cpus {
-        info!("  Note: {} guests will share {} CPUs (thread pool mode)", num_guests, num_blocking_threads);
-    } else {
-        info!("  Mode: 1 thread per guest");
-    }
+    // Verify we're not using CPU 0
+    assert!(num_worker_threads == num_cores - 1,
+        "Expected {} threads (all CPUs except CPU 0), got {}", num_cores - 1, num_worker_threads);
 
-    // Counters for worker and blocking threads
-    let worker_counter = Arc::new(AtomicUsize::new(0));
-    let blocking_counter = Arc::new(AtomicUsize::new(0));
-
-    let worker_counter_clone = Arc::clone(&worker_counter);
-    let blocking_counter_clone = Arc::clone(&blocking_counter);
-
-    // Build custom runtime with explicit blocking pool configuration
+    // Build custom runtime with FIXED thread pool
+    // Worker threads = all available CPUs
+    // All guest calls are scheduled as tasks on this fixed pool
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(num_worker_threads)
-        .max_blocking_threads(num_blocking_threads)
         .on_thread_start(move || {
-            // This callback is called for BOTH worker threads AND blocking threads
-            static TOTAL_THREAD_COUNTER: AtomicUsize = AtomicUsize::new(0);
-            let thread_id = TOTAL_THREAD_COUNTER.fetch_add(1, Ordering::SeqCst);
+            // Pin each thread to a CPU (CPUs 1 through N)
+            static THREAD_COUNTER: AtomicUsize = AtomicUsize::new(0);
+            let thread_id = THREAD_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-            if thread_id < num_worker_threads {
-                // This is a worker thread - pin to CPU 1
-                let worker_id = worker_counter_clone.fetch_add(1, Ordering::SeqCst);
-                if core_affinity::set_for_current(worker_core_id) {
-                    info!("Worker thread {} pinned to CPU 1", worker_id);
-                } else {
-                    log::warn!("Failed to pin worker thread {} to CPU 1", worker_id);
-                }
+            let cpu_index = thread_id % worker_core_ids.len();
+            let core_id = worker_core_ids[cpu_index];
+
+            if core_affinity::set_for_current(core_id) {
+                info!("Thread {} pinned to CPU {}", thread_id, cpu_index + 1);
             } else {
-                // This is a blocking thread - pin to CPUs 2-N
-                let blocking_id = blocking_counter_clone.fetch_add(1, Ordering::SeqCst);
-                let cpu_index = blocking_id % blocking_core_ids.len();
-                let core_id = blocking_core_ids[cpu_index];
-
-                if core_affinity::set_for_current(core_id) {
-                    info!("Blocking thread {} pinned to CPU {}", blocking_id, cpu_index + 2);
-                } else {
-                    log::warn!("Failed to pin blocking thread {} to CPU {}", blocking_id, cpu_index + 2);
-                }
+                log::warn!("Failed to pin thread {} to CPU {}", thread_id, cpu_index + 1);
             }
         })
         .enable_all()

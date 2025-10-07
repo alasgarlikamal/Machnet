@@ -124,7 +124,7 @@ setup_hugepages:
 # Run Machnet
 run_machnet: setup_hugepages $(RELEASE_BINARY)
 	@echo "Starting Machnet with config: $(CONFIG_FILE)..."
-	sudo GLOG_logtostderr=1 $(RELEASE_BINARY) -config_json $(CONFIG_FILE)
+	GLOG_logtostderr=1 sudo taskset -c 0 $(RELEASE_BINARY) -config_json $(CONFIG_FILE)
 
 # Run msg_gen server
 run_msg_gen_server_cpp: setup_hugepages $(RELEASE_BINARY)
