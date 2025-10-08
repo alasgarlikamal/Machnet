@@ -1,0 +1,33 @@
+diff --git a/deps/abseil-cpp b/deps/abseil-cpp
+index c51510d..d38452e 160000
+--- a/deps/abseil-cpp
++++ b/deps/abseil-cpp
+@@ -1 +1 @@
+-Subproject commit c51510d1d87ebce8615ae1752fd5aca912f6cf4c
++Subproject commit d38452e1ee03523a208362186fd42248ff2609f6
+diff --git a/deps/fmt b/deps/fmt
+index 19bd751..e424e3f 160000
+--- a/deps/fmt
++++ b/deps/fmt
+@@ -1 +1 @@
+-Subproject commit 19bd751020a1f3c3363b2eb67a039852f139a8d3
++Subproject commit e424e3f2e607da02742f73db84873b8084fc714c
+diff --git a/src/common/stat.h b/src/common/stat.h
+index 1dcdc81..3dad069 100644
+--- a/src/common/stat.h
++++ b/src/common/stat.h
+@@ -232,10 +232,10 @@ private:
+     }
+ 
+     inline T percentile(double p) {
+-        size_t idx = gsl::narrow_cast<size_t>(samples_.size() * p + 0.5);
+-        if (idx < 0) idx = 0;
+-        if (idx >= samples_.size()) {
+-            idx = samples_.size() - 1;
++      size_t idx =
++          gsl::narrow_cast<size_t>(std::max(0.0, samples_.size() * p + 0.5));
++      if (idx >= samples_.size()) {
++        idx = samples_.size() - 1;
+         }
+         return samples_[idx];
+     }
