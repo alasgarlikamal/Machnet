@@ -33,6 +33,7 @@ type Server struct {
 	// Assumption: There is only one pending pipeline channel per flow.
 	pendingPipelineResponses map[flow]PendingResponse
 	pipelineMutex            sync.Mutex
+	statsMutex               sync.Mutex // Protects histogram and msgCounts
 	histogram                *hdrhistogram.Histogram
 	lastRecordedTime         time.Time
 	msgCounts                map[uint8]int
@@ -129,7 +130,10 @@ func DecodeRPCMessage(data []byte) (RpcMessage, error) {
 // response (rpcMessage): The response to be sent.
 // flow (flow): The flow that received the original RPC. SendMachnetResponse will send the response on the reverse flow.
 func (s *Server) SendMachnetResponse(response RpcMessage, flow flow, start time.Time) error {
+	s.statsMutex.Lock()
 	s.msgCounts[response.MsgType]++
+	s.statsMutex.Unlock()
+
 	var buff bytes.Buffer
 	//enc := gob.NewEncoder(&buff)
 	enc := codec.NewEncoder(&buff, &codec.MsgpackHandle{})
@@ -155,6 +159,10 @@ func (s *Server) SendMachnetResponse(response RpcMessage, flow flow, start time.
 	if ret != 0 {
 		return errors.New("SendMachnetResponse: failed to send message to remote host")
 	}
+
+	s.statsMutex.Lock()
+	defer s.statsMutex.Unlock()
+
 	err := s.histogram.RecordValue(time.Since(start).Microseconds())
 	if err != nil {
 		glog.Errorf("Failed to record to histogram")
@@ -406,9 +414,7 @@ func (s *Server) HandleAppendEntriesPipelineStart(rpcId uint64, flow flow, start
 }
 
 func (s *Server) HandleAppendEntriesPipeline(payload []byte, rpcId uint64, flow flow, start time.Time) error {
-
 	var buff bytes.Buffer
-	//dec := gob.NewDecoder(&buff)
 	dec := codec.NewDecoder(&buff, &codec.MsgpackHandle{})
 	var appendEntriesRequest raft.AppendEntriesRequest
 	if n, _ := buff.Write(payload); n != len(payload) {
@@ -419,62 +425,44 @@ func (s *Server) HandleAppendEntriesPipeline(payload []byte, rpcId uint64, flow 
 		return err
 	}
 
-	//s.pipelineMutex.Lock()
-	//defer s.pipelineMutex.Unlock()
-	if pendingResponse, ok := s.pendingPipelineResponses[flow]; ok {
-		//pendingResponse.numPending += 1
-		//s.pendingPipelineResponses[flow] = pendingResponse
-
+	go func() {
+		ch := make(chan raft.RPCResponse, 1)
 		rpc := raft.RPC{
 			Command:  &appendEntriesRequest,
-			RespChan: pendingResponse.ch,
+			RespChan: ch,
 			Reader:   nil,
 		}
 
-		_, ok := rpc.Command.(raft.WithRPCHeader)
-		if !ok {
+		if _, ok := rpc.Command.(raft.WithRPCHeader); !ok {
 			glog.Errorf("HandleAppendEntriesPipeline: appendEntriesRequest does not have a WithRPCHeader")
 		}
+
 		s.transport.rpcChan <- rpc
-		// wait for answer
-		resp := <-pendingResponse.ch
+		resp := <-ch
 		if resp.Error != nil {
-			glog.Error("GetResponseFromChannel: couldn't handle Rpc; error: ", resp.Error)
-			return resp.Error
+			glog.Errorf("HandleAppendEntriesPipeline: couldn't handle Rpc; error: %v", resp.Error)
+			return
 		}
 
-		var buff bytes.Buffer
-		//enc := gob.NewEncoder(&buff)
-		enc := codec.NewEncoder(&buff, &codec.MsgpackHandle{})
-		payload := resp.Response.(*raft.AppendEntriesResponse)
-		if err := enc.Encode(*payload); err != nil {
-			return err
+		var respBuff bytes.Buffer
+		enc := codec.NewEncoder(&respBuff, &codec.MsgpackHandle{})
+		respPayload := resp.Response.(*raft.AppendEntriesResponse)
+		if err := enc.Encode(*respPayload); err != nil {
+			glog.Errorf("HandleAppendEntriesPipeline: failed to encode response: %v", err)
+			return
 		}
-		msgType := AppendEntriesPipelineResponse
+
 		response := RpcMessage{
-			MsgType: msgType,
+			MsgType: AppendEntriesPipelineResponse,
 			RpcId:   rpcId,
-			Payload: buff.Bytes(),
+			Payload: respBuff.Bytes(),
 		}
+
 		if err := s.SendMachnetResponse(response, flow, start); err != nil {
-			glog.Errorf("GetResponseFromChannel: failed to SendMachnetResponse: %v", err)
-			return err
+			glog.Errorf("HandleAppendEntriesPipeline: failed to SendMachnetResponse: %v", err)
 		}
-		//if err := s.GetResponseFromChannel(pendingResponse.ch, flow, AppendEntriesPipeline, rpcId, start); err != nil {
-		//	return err
-		//}
-	}
+	}()
 
-	//s.pipelineMutex.Unlock()
-
-	// send it back
-
-	//response := RpcMessage{
-	//	MsgType: AppendEntriesPipelineSendResponse,
-	//	RpcId:   rpcId,
-	//	Payload: []byte{},
-	//}
-	//return s.SendMachnetResponse(response, flow, start)
 	return nil
 }
 

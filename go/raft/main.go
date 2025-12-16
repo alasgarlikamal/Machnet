@@ -28,6 +28,13 @@ var (
 	configJson    = flag.String("config_json", "../servers.json", "Path to the JSON file containing the hosts config.")
 	raftDir       = flag.String("raft_data_dir", "data/", "Raft data dir")
 	leader        = flag.Bool("leader", false, "Whether to start the node as a leader")
+
+	// Raft Global Parameters
+	raftHeartbeatTimeout   = flag.Duration("raft_heartbeat_timeout", 1000*time.Millisecond, "Raft heartbeat timeout")
+	raftElectionTimeout    = flag.Duration("raft_election_timeout", 1000*time.Millisecond, "Raft election timeout")
+	raftCommitTimeout      = flag.Duration("raft_commit_timeout", 50*time.Millisecond, "Raft commit timeout")
+	raftLeaderLeaseTimeout = flag.Duration("raft_leader_lease_timeout", 500*time.Millisecond, "Raft leader lease timeout")
+	raftMaxAppendEntries   = flag.Int("raft_max_append_entries", 64, "Raft max append entries")
 )
 
 const maxRequestSize = 2048
@@ -52,8 +59,13 @@ func main() {
 		log.Fatalf("Failed to start raft: %v", err)
 	}
 
+	// Start the server immediately so we can participate in Raft.
+	server := NewServer(transport)
+	go server.StartServer()
+
 	if *leader {
 		leaderCh := raftNode.LeaderCh()
+		glog.Info("Waiting to become leader...")
 		<-leaderCh
 
 		if raftNode.State() == raft.Leader {
@@ -91,8 +103,6 @@ func main() {
 		glog.Info("Current node is a follower.")
 	}
 
-	server := NewServer(transport)
-	go server.StartServer()
 	//file, _ := os.Create("main.trace")
 	//trace.Start(file)
 	//defer trace.Stop()
@@ -107,11 +117,11 @@ func NewRaft(id string, fsm raft.FSM) (*raft.Raft, *TransportApi, error) {
 	c.LocalID = raft.ServerID(id)
 	// c.LogLevel = "WARN"
 
-	c.MaxAppendEntries = 1
-	c.CommitTimeout = 1 * time.Millisecond
-	c.LeaderLeaseTimeout = 1 * time.Minute
-	c.HeartbeatTimeout = 1 * time.Minute
-	c.ElectionTimeout = 2 * time.Minute
+	c.MaxAppendEntries = *raftMaxAppendEntries
+	c.CommitTimeout = *raftCommitTimeout
+	c.LeaderLeaseTimeout = *raftLeaderLeaseTimeout
+	c.HeartbeatTimeout = *raftHeartbeatTimeout
+	c.ElectionTimeout = *raftElectionTimeout
 	c.SnapshotInterval = 6 * time.Minute
 
 	baseDir := filepath.Join(*raftDir, id)
