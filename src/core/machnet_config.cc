@@ -69,6 +69,7 @@ MachnetConfigProcessor::MachnetConfigProcessor(
   config_json_file >> json_;
   AssertJsonValidMachnetConfig();
   DiscoverInterfaceConfiguration();
+  DiscoverArpTable();
 }
 
 void MachnetConfigProcessor::AssertJsonValidMachnetConfig() {
@@ -142,6 +143,21 @@ void MachnetConfigProcessor::DiscoverInterfaceConfiguration() {
   }
   for (const auto &interface : interfaces_config_) {
     interface.Dump();
+  }
+}
+
+void MachnetConfigProcessor::DiscoverArpTable() {
+  if (json_.find(kArpTableJsonKey) != json_.end()) {
+    for (const auto &arp_entry : json_.at(kArpTableJsonKey)) {
+      if (arp_entry.find("ip") == arp_entry.end() || arp_entry.find("mac") == arp_entry.end()) {
+        LOG(FATAL) << "Invalid arp_table entry in " << config_json_filename_ << ". Must contain 'ip' and 'mac'.";
+      }
+      net::Ipv4::Address ip_addr;
+      CHECK(ip_addr.FromString(arp_entry.at("ip"))) << "Invalid IP in static ARP table.";
+      net::Ethernet::Address mac_addr(arp_entry.at("mac").get<std::string>());
+      arp_table_.push_back({ip_addr, mac_addr});
+      LOG(INFO) << "Loaded static ARP entry: " << ip_addr.ToString() << " -> " << mac_addr.ToString();
+    }
   }
 }
 

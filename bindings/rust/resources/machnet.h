@@ -86,6 +86,15 @@ MachnetChannelCtx_t *machnet_bind(int shm_fd, size_t *channel_size);
 void *machnet_attach();
 
 /**
+ * @brief Creates a new channel to the Machnet controller and binds to it.
+ * This version also returns the shared memory file descriptor.
+ *
+ * @param[out] shm_fd Pointer to an integer that will receive the SHM FD.
+ * @return A pointer to the channel context on success, NULL otherwise.
+ */
+void *machnet_attach_raw(int *shm_fd);
+
+/**
  * @brief Listens for incoming messages on a specific IP and port.
  * @param[in] channel The channel associated to the listener.
  * @param[in] ip The local IP address to listen on.

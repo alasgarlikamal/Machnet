@@ -288,6 +288,11 @@ class MachnetEngineSharedState {
     arp_handler_.ProcessArpPacket(txring, arph);
   }
 
+  void AddStaticArpEntry(const net::Ipv4::Address &ip, const net::Ethernet::Address &mac) {
+    const std::lock_guard<std::mutex> lock(mtx_);
+    arp_handler_.AddStaticEntry(ip, mac);
+  }
+
   std::vector<std::tuple<std::string, std::string>> GetArpTableEntries() {
     const std::lock_guard<std::mutex> lock(mtx_);
     return arp_handler_.GetArpTableEntries();

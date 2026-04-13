@@ -70,6 +70,12 @@ void MachnetController::Run() {
     auto shared_state = std::make_shared<MachnetEngineSharedState>(
         pmd_ports_.back()->GetRSSKey(), pmd_ports_.back()->GetL2Addr(),
         std::vector<net::Ipv4::Address>(1, interface.ip_addr()));
+    
+    // Inject static ARP entries
+    for (const auto &arp_entry : config_processor_.arp_table()) {
+      shared_state->AddStaticArpEntry(arp_entry.first, arp_entry.second);
+    }
+
     // Create the Machnet engines.
     for (size_t i = 0; i < interface.engine_threads(); ++i) {
       engines_.emplace_back(std::make_shared<juggler::MachnetEngine>(

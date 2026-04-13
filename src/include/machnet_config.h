@@ -104,15 +104,21 @@ class MachnetConfigProcessor {
   std::unordered_set<NetworkInterfaceConfig> &interfaces_config() {
     return interfaces_config_;
   }
+  std::vector<std::pair<net::Ipv4::Address, net::Ethernet::Address>> &arp_table() {
+    return arp_table_;
+  }
   utils::CmdLineOpts GetEalOpts() const;
 
  private:
   void AssertJsonValidMachnetConfig();
   void DiscoverInterfaceConfiguration();
+  void DiscoverArpTable();
 
   static constexpr const char *kMachnetConfigJsonKey = "machnet_config";
+  static constexpr const char *kArpTableJsonKey = "arp_table";
   const std::string config_json_filename_;
   std::unordered_set<NetworkInterfaceConfig> interfaces_config_;
+  std::vector<std::pair<net::Ipv4::Address, net::Ethernet::Address>> arp_table_;
   nlohmann::json json_;
 };
 

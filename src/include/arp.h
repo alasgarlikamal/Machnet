@@ -255,6 +255,11 @@ class ArpHandler {
     }
   }
 
+  void AddStaticEntry(const Ipv4::Address &ip, const Ethernet::Address &mac) {
+    arp_table_[ip] = mac;
+    LOG(INFO) << "Added static ARP entry: " << ip.ToString() << " -> " << mac.ToString();
+  }
+
   std::vector<std::tuple<std::string, std::string>> GetArpTableEntries() const {
     std::vector<std::tuple<std::string, std::string>> arp_table;
     for (auto &kv : arp_table_) {
