@@ -46,7 +46,7 @@ static rte_eth_conf DefaultEthConf(const rte_eth_dev_info *devinfo) {
     rss_hf &= devinfo->flow_type_rss_offloads;
   }
 
-  port_conf.lpbk_mode = 1;
+  port_conf.lpbk_mode = 0;
   port_conf.rxmode.mq_mode = RTE_ETH_MQ_RX_RSS;
 
   port_conf.rxmode.mtu = PmdRing::kDefaultFrameSize;
@@ -83,18 +83,18 @@ static rte_eth_conf DefaultEthConf(const rte_eth_dev_info *devinfo) {
 
 void TxRing::Init() {
   int ret = rte_eth_tx_queue_setup(this->GetPortId(), this->GetRingId(),
-                                   this->GetDescNum(), SOCKET_ID_ANY, &conf_);
+                                   512, SOCKET_ID_ANY, &conf_);
   if (ret != 0) {
-    LOG(FATAL) << "rte_eth_tx_queue_setup() faled. Cannot setup TX queue.";
+    LOG(FATAL) << "rte_eth_tx_queue_setup() failed for port " << (int)this->GetPortId() << " queue " << (int)this->GetRingId() << ". Error: " << ret;
   }
 }
 
 void RxRing::Init() {
   int ret = rte_eth_rx_queue_setup(this->GetPortId(), this->GetRingId(),
-                                   this->GetDescNum(), SOCKET_ID_ANY, &conf_,
+                                   512, SOCKET_ID_ANY, &conf_,
                                    this->GetPacketMemPool());
   if (ret != 0) {
-    LOG(FATAL) << "rte_eth_rx_queue_setup() faled. Cannot setup RX queue.";
+    LOG(FATAL) << "rte_eth_rx_queue_setup() failed for port " << (int)this->GetPortId() << " queue " << (int)this->GetRingId() << ". Error: " << ret;
   }
 }
 
@@ -227,6 +227,9 @@ void PmdPort::InitDriver(uint16_t mtu) {
       std::cout << reta_table;
     }
 
+    tx_ring_desc_nr_ = std::max(tx_ring_desc_nr_, (uint16_t)1024);
+    rx_ring_desc_nr_ = std::max(rx_ring_desc_nr_, (uint16_t)1024);
+
     ret = rte_eth_dev_adjust_nb_rx_tx_desc(port_id_, &rx_ring_desc_nr_,
                                            &tx_ring_desc_nr_);
     if (ret != 0) {
@@ -241,9 +244,9 @@ void PmdPort::InitDriver(uint16_t mtu) {
     // Setup the TX queues.
     for (auto q = 0; q < tx_rings_nr_; q++) {
       LOG(INFO) << "Initializing TX ring: " << q;
-      auto tx_ring = makeRing<TxRing>(this, port_id_, q, tx_ring_desc_nr_,
+      auto tx_ring = makeRing<TxRing>(this, port_id_, q, 512,
                                       devinfo_.default_txconf,
-                                      2 * tx_ring_desc_nr_ - 1, mbuf_data_size);
+                                      16383, mbuf_data_size);
       // auto tx_ring = makeRing<TxRing>(this, port_id_, q, tx_ring_desc_nr_,
       //                                 devinfo_.default_txconf);
       tx_ring.get()->Init();
@@ -253,9 +256,9 @@ void PmdPort::InitDriver(uint16_t mtu) {
     // Setup the RX queues.
     for (auto q = 0; q < rx_rings_nr_; q++) {
       LOG(INFO) << "Initializing RX ring: " << q;
-      auto rx_ring = makeRing<RxRing>(this, port_id_, q, rx_ring_desc_nr_,
+      auto rx_ring = makeRing<RxRing>(this, port_id_, q, 512,
                                       devinfo_.default_rxconf,
-                                      2 * rx_ring_desc_nr_ - 1, mbuf_data_size);
+                                      16383, mbuf_data_size);
       rx_ring.get()->Init();
       rx_rings_.emplace_back(std::move(rx_ring));
     }

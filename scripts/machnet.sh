@@ -48,10 +48,9 @@ fi
 # Hugepage allocation
 #
 
-#Allocate memory for the first NUMA node
-if ! cat /sys/devices/system/node/*/meminfo | grep HugePages_Total | grep -q 1024
-then
-    echo "Insufficient or no hugepages available"
+total_hugepages=$(cat /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages)
+if [ "$total_hugepages" -lt 1024 ]; then
+    echo "Insufficient hugepages available ($total_hugepages). Need at least 1024."
     read -p "Do you want to allocate 1024 2MB hugepages? (y/n) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]
@@ -93,14 +92,14 @@ if [ ! -d "/var/run/machnet" ]; then
     sudo chmod 755 /var/run/machnet # Set permissions like Ubuntu's default, needed on (e.g.) CentOS
 fi
 
-sudo bash -c "echo '{\"machnet_config\": {\"$LOCAL_MAC\": {\"ip\": \"$LOCAL_IP\"}}}' > /var/run/machnet/local_config.json"
+sudo bash -c "echo '{\"machnet_config\": {\"$LOCAL_MAC\": {\"ip\": \"$LOCAL_IP\", \"engine_threads\": 1}}}' > /var/run/machnet/local_config.json"
 echo "Created config for local Machnet, in /var/run/machnet/local_config.json. Contents:"
 sudo cat /var/run/machnet/local_config.json
 
 if [ $BARE_METAL -eq 1 ]; then
     echo "Starting Machnet in bare-metal mode"
     THIS_SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-    machnet_bin="${THIS_SCRIPT_DIR}/build/src/apps/machnet/machnet"
+    machnet_bin="${THIS_SCRIPT_DIR}/../debug_build/src/apps/machnet/machnet"
 
     if [ ! -f ${machnet_bin} ]; then
         echo "Machnet binary ${machnet_bin} not found, please build Machnet first"
@@ -112,11 +111,6 @@ else
     if ! command -v docker &> /dev/null
     then
         echo "Please install docker"
-        exit
-    fi
-
-    if ! groups | grep -q docker; then
-        echo "Please add the current user to the docker group"
         exit
     fi
 

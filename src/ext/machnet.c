@@ -369,7 +369,7 @@ fail:
   return NULL;
 }
 
-void *machnet_attach() {
+void *machnet_attach_raw(int *shm_fd) {
   uuid_t uuid;        // UUID for the shared memory channel.
   char uuid_str[37];  // 36 chars + null terminator for UUID string.
 
@@ -398,16 +398,22 @@ void *machnet_attach() {
   if (resp.type != MACHNET_CTRL_MSG_TYPE_RESPONSE ||
       resp.msg_id != req.msg_id) {
     fprintf(stderr, "Got invalid response from controller.\n");
+    if (channel_fd >= 0) close(channel_fd);
     return NULL;
   }
 
   if (resp.status != MACHNET_CTRL_STATUS_SUCCESS || channel_fd < 0) {
     fprintf(stderr, "Failure %d.\n", channel_fd);
+    if (channel_fd >= 0) close(channel_fd);
     return NULL;
   }
 
+  if (shm_fd != NULL) *shm_fd = channel_fd;
+
   return machnet_bind(channel_fd, NULL);
 }
+
+void *machnet_attach() { return machnet_attach_raw(NULL); }
 
 int machnet_connect(void *channel_ctx, const char *src_ip, const char *dst_ip,
                     uint16_t dst_port, MachnetFlow_t *flow) {

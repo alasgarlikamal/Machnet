@@ -126,6 +126,14 @@ pub fn machnet_attach<'a>() -> Option<MachnetChannel<'a>> {
     }
 }
 
+pub fn machnet_attach_raw<'a>() -> Option<(MachnetChannel<'a>, i32)> {
+    unsafe {
+        let mut shm_fd: i32 = -1;
+        let ptr = bindings::machnet_attach_raw(&mut shm_fd as *mut i32);
+        MachnetChannel::from_raw(ptr).map(|ch| (ch, shm_fd))
+    }
+}
+
 /// Establishes a Machnet connection using the provided chanenel.
 ///
 /// This function attempts to create a connection between a local IP address and a remote IP address on a specified port.
