@@ -82,19 +82,31 @@ static rte_eth_conf DefaultEthConf(const rte_eth_dev_info *devinfo) {
 }
 
 void TxRing::Init() {
+  LOG(INFO) << "TxRing::Init port=" << static_cast<int>(this->GetPortId())
+            << " queue=" << this->GetRingId()
+            << " nb_desc=" << this->GetDescNum();
   int ret = rte_eth_tx_queue_setup(this->GetPortId(), this->GetRingId(),
-                                   512, SOCKET_ID_ANY, &conf_);
+                                   this->GetDescNum(), SOCKET_ID_ANY, &conf_);
   if (ret != 0) {
-    LOG(FATAL) << "rte_eth_tx_queue_setup() failed for port " << (int)this->GetPortId() << " queue " << (int)this->GetRingId() << ". Error: " << ret;
+    LOG(FATAL) << "rte_eth_tx_queue_setup() failed for port "
+               << static_cast<int>(this->GetPortId()) << " queue "
+               << this->GetRingId() << " nb_desc=" << this->GetDescNum()
+               << ". Error: " << ret;
   }
 }
 
 void RxRing::Init() {
+  LOG(INFO) << "RxRing::Init port=" << static_cast<int>(this->GetPortId())
+            << " queue=" << this->GetRingId()
+            << " nb_desc=" << this->GetDescNum();
   int ret = rte_eth_rx_queue_setup(this->GetPortId(), this->GetRingId(),
-                                   512, SOCKET_ID_ANY, &conf_,
+                                   this->GetDescNum(), SOCKET_ID_ANY, &conf_,
                                    this->GetPacketMemPool());
   if (ret != 0) {
-    LOG(FATAL) << "rte_eth_rx_queue_setup() failed for port " << (int)this->GetPortId() << " queue " << (int)this->GetRingId() << ". Error: " << ret;
+    LOG(FATAL) << "rte_eth_rx_queue_setup() failed for port "
+               << static_cast<int>(this->GetPortId()) << " queue "
+               << this->GetRingId() << " nb_desc=" << this->GetDescNum()
+               << ". Error: " << ret;
   }
 }
 
@@ -227,6 +239,14 @@ void PmdPort::InitDriver(uint16_t mtu) {
       std::cout << reta_table;
     }
 
+    LOG(INFO) << "Raw descriptor limits from PMD: "
+              << "tx nb_max=" << devinfo_.tx_desc_lim.nb_max
+              << " nb_min=" << devinfo_.tx_desc_lim.nb_min
+              << " nb_align=" << devinfo_.tx_desc_lim.nb_align
+              << " | rx nb_max=" << devinfo_.rx_desc_lim.nb_max
+              << " nb_min=" << devinfo_.rx_desc_lim.nb_min
+              << " nb_align=" << devinfo_.rx_desc_lim.nb_align;
+
     tx_ring_desc_nr_ = std::max(tx_ring_desc_nr_, (uint16_t)1024);
     rx_ring_desc_nr_ = std::max(rx_ring_desc_nr_, (uint16_t)1024);
 
@@ -235,8 +255,10 @@ void PmdPort::InitDriver(uint16_t mtu) {
     if (ret != 0) {
       LOG(FATAL)
           << "rte_eth_dev_adjust_nb_rx_tx_desc() failed for port with id: "
-          << static_cast<int>(port_id_);
+          << static_cast<int>(port_id_) << ". Error: " << ret;
     }
+    LOG(INFO) << "Adjusted descriptor counts: rx=" << rx_ring_desc_nr_
+              << " tx=" << tx_ring_desc_nr_;
 
     const auto mbuf_data_size =
         mtu + RTE_ETHER_HDR_LEN + RTE_ETHER_CRC_LEN + RTE_PKTMBUF_HEADROOM;
@@ -244,11 +266,9 @@ void PmdPort::InitDriver(uint16_t mtu) {
     // Setup the TX queues.
     for (auto q = 0; q < tx_rings_nr_; q++) {
       LOG(INFO) << "Initializing TX ring: " << q;
-      auto tx_ring = makeRing<TxRing>(this, port_id_, q, 512,
+      auto tx_ring = makeRing<TxRing>(this, port_id_, q, tx_ring_desc_nr_,
                                       devinfo_.default_txconf,
                                       16383, mbuf_data_size);
-      // auto tx_ring = makeRing<TxRing>(this, port_id_, q, tx_ring_desc_nr_,
-      //                                 devinfo_.default_txconf);
       tx_ring.get()->Init();
       tx_rings_.emplace_back(std::move(tx_ring));
     }
@@ -256,7 +276,7 @@ void PmdPort::InitDriver(uint16_t mtu) {
     // Setup the RX queues.
     for (auto q = 0; q < rx_rings_nr_; q++) {
       LOG(INFO) << "Initializing RX ring: " << q;
-      auto rx_ring = makeRing<RxRing>(this, port_id_, q, 512,
+      auto rx_ring = makeRing<RxRing>(this, port_id_, q, rx_ring_desc_nr_,
                                       devinfo_.default_rxconf,
                                       16383, mbuf_data_size);
       rx_ring.get()->Init();
