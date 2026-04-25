@@ -17,3 +17,16 @@ set_target_properties(${MACHNET_SHIM_LIB_NAME} PROPERTIES SOVERSION ${PROJECT_VE
 
 # Set the public header property to the one with the actual API.
 set_target_properties(${MACHNET_SHIM_LIB_NAME} PROPERTIES PUBLIC_HEADER machnet.h)
+
+# Guest-side library for Firecracker VMs (LD_PRELOAD inside the guest).
+# Uses VirtIO config space discovery + /dev/mem instead of the controller socket.
+set(MACHNET_GUEST_LIB_NAME machnet_guest)
+
+add_library(${MACHNET_GUEST_LIB_NAME} SHARED machnet_guest.c)
+target_include_directories(${MACHNET_GUEST_LIB_NAME} PRIVATE .)
+target_include_directories(${MACHNET_GUEST_LIB_NAME} PRIVATE ../include)
+set_target_properties(${MACHNET_GUEST_LIB_NAME} PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+    PUBLIC_HEADER machnet.h
+)

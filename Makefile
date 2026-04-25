@@ -31,6 +31,16 @@ SRC_FILES=$(shell find $(SRC_DIRS) -type f -name "*.c" -o -name "*.cpp" -o -name
 DEBUG_BINARY=$(DEBUG_BUILD_DIR)/src/apps/machnet/machnet
 RELEASE_BINARY=$(RELEASE_BUILD_DIR)/src/apps/machnet/machnet
 MSG_GEN_BINARY=$(RELEASE_BUILD_DIR)/src/apps/msg_gen/msg_gen
+BURST_SENDER_BINARY=$(RELEASE_BUILD_DIR)/src/apps/burst_sender/burst_sender
+SIZE_SWEEP_BINARY=$(RELEASE_BUILD_DIR)/src/apps/size_sweep/size_sweep
+
+# burst_sender configuration
+BURST_SIZE?=32
+BURST_MSG_SIZE?=64
+
+# size_sweep configuration
+SWEEP_SIZES?=64,256,1024,4096,16384,65536
+SWEEP_STEP_SECS?=5
 
 # Hugepage configuration
 HUGEPAGE_SIZE=2048
@@ -46,7 +56,7 @@ SERVER_IP?=10.10.1.1
 CLIENT_IP?=10.10.1.2
 
 # Define all phony targets
-.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp shim check_shim_deps build_shim help git_submodules generate_config
+.PHONY: all_containers x86_containers arm_containers debug release clean run_machnet setup_hugepages run_msg_gen_server_cpp run_msg_gen_client_cpp run_burst_sender_server run_burst_sender_client run_size_sweep_server run_size_sweep_client shim check_shim_deps build_shim help git_submodules generate_config
 
 # Default target is help
 .DEFAULT_GOAL := help
@@ -64,8 +74,12 @@ help:
 	@echo "  clean                   - Remove all build artifacts"
 	@echo "  setup_hugepages         - Configure system hugepages"
 	@echo "  run_machnet             - Run Machnet with the specified config"
-	@echo "  run_msg_gen_server_cpp  - Run msg_gen server"
-	@echo "  run_msg_gen_client_cpp  - Run msg_gen client"
+	@echo "  run_msg_gen_server_cpp       - Run msg_gen server"
+	@echo "  run_msg_gen_client_cpp       - Run msg_gen client"
+	@echo "  run_burst_sender_server      - Run burst_sender server"
+	@echo "  run_burst_sender_client      - Run burst_sender client"
+	@echo "  run_size_sweep_server        - Run size_sweep server"
+	@echo "  run_size_sweep_client        - Run size_sweep client"
 	@echo "  shim                    - Build and install the Machnet shim library (requires sudo)"
 	@echo "  git_submodules          - Initialize and update git submodules"
 	@echo "  generate_config         - Generate Machnet configuration file"
@@ -75,6 +89,10 @@ help:
 	@echo "  CONFIG_FILE             - Path to Machnet config file"
 	@echo "  SERVER_IP               - IP address for msg_gen server"
 	@echo "  CLIENT_IP               - IP address for msg_gen client"
+	@echo "  BURST_SIZE              - Messages per burst (default: 32)"
+	@echo "  BURST_MSG_SIZE          - Message size for burst_sender (default: 64)"
+	@echo "  SWEEP_SIZES             - Comma-separated sizes for size_sweep (default: 64,256,1024,4096,16384,65536)"
+	@echo "  SWEEP_STEP_SECS         - Seconds per size step (default: 5)"
 
 # Git submodules target
 git_submodules:
@@ -168,6 +186,28 @@ run_msg_gen_server_cpp: setup_hugepages $(RELEASE_BINARY)
 run_msg_gen_client_cpp: setup_hugepages $(RELEASE_BINARY)
 	@echo "Starting msg_gen client on IP: $(CLIENT_IP) connecting to server: $(SERVER_IP)..."
 	sudo GLOG_logtostderr=1 $(MSG_GEN_BINARY) --local_ip $(CLIENT_IP) --remote_ip $(SERVER_IP)
+
+# Run burst_sender server
+run_burst_sender_server: setup_hugepages $(BURST_SENDER_BINARY)
+	@echo "Starting burst_sender server on IP: $(SERVER_IP)..."
+	sudo GLOG_logtostderr=1 $(BURST_SENDER_BINARY) --local_ip $(SERVER_IP)
+
+# Run burst_sender client
+run_burst_sender_client: setup_hugepages $(BURST_SENDER_BINARY)
+	@echo "Starting burst_sender client on IP: $(CLIENT_IP) connecting to server: $(SERVER_IP)..."
+	sudo GLOG_logtostderr=1 $(BURST_SENDER_BINARY) --local_ip $(CLIENT_IP) --remote_ip $(SERVER_IP) \
+		--burst_size $(BURST_SIZE) --msg_size $(BURST_MSG_SIZE)
+
+# Run size_sweep server
+run_size_sweep_server: setup_hugepages $(SIZE_SWEEP_BINARY)
+	@echo "Starting size_sweep server on IP: $(SERVER_IP)..."
+	sudo GLOG_logtostderr=1 $(SIZE_SWEEP_BINARY) --local_ip $(SERVER_IP)
+
+# Run size_sweep client
+run_size_sweep_client: setup_hugepages $(SIZE_SWEEP_BINARY)
+	@echo "Starting size_sweep client on IP: $(CLIENT_IP) connecting to server: $(SERVER_IP)..."
+	sudo GLOG_logtostderr=1 $(SIZE_SWEEP_BINARY) --local_ip $(CLIENT_IP) --remote_ip $(SERVER_IP) \
+		--sizes $(SWEEP_SIZES) --step_secs $(SWEEP_STEP_SECS)
 
 # Shim library targets
 check_shim_deps:
