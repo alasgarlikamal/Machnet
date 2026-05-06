@@ -154,7 +154,7 @@ void ClientLoop(void *channel_ctx, MachnetFlow_t *flow) {
                 << "  TX: " << msgs_sent / sec << " msg/s"
                 << "  Burst RTT p50/p99 (us): "
                 << p(hist, 50) << "/" << p(hist, 99)
-                << "  Drops: " << tx_drops << "\n";
+                << "  Drops: " << tx_drops << std::endl;
       bursts_sent = msgs_sent = msgs_recvd = tx_drops = 0;
       hdr_reset(hist);
       last_report = now;
