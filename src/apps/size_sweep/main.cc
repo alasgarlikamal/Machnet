@@ -206,6 +206,7 @@ int main(int argc, char *argv[]) {
   ::google::InitGoogleLogging(argv[0]);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   signal(SIGINT, SigIntHandler);
+  signal(SIGTERM, SigIntHandler);
   FLAGS_logtostderr = 1;
 
   CHECK_EQ(machnet_init(), 0);
@@ -225,7 +226,7 @@ int main(int argc, char *argv[]) {
     MachnetFlow_t flow;
     CHECK_EQ(machnet_connect(channel_ctx, FLAGS_local_ip.c_str(),
                              FLAGS_remote_ip.c_str(), FLAGS_remote_port, &flow), 0);
-    barrier_wait(FLAGS_barrier_dir, FLAGS_n_clients);
+    barrier_wait(FLAGS_barrier_dir, FLAGS_n_clients, g_keep_running);
     datapath = std::thread(ClientLoop, channel_ctx, &flow);
   }
 

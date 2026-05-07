@@ -326,6 +326,7 @@ int main(int argc, char *argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   gflags::SetUsageMessage("Simple Machnet-based message generator.");
   signal(SIGINT, SigIntHandler);
+  signal(SIGTERM, SigIntHandler);
   FLAGS_logtostderr = 1;
 
   CHECK_GT(FLAGS_msg_size, sizeof(app_hdr_t)) << "Message size too small";
@@ -353,7 +354,7 @@ int main(int argc, char *argv[]) {
     LOG(INFO) << "[CONNECTED] [" << FLAGS_local_ip << ":" << flow.src_port
               << " <-> " << FLAGS_remote_ip << ":" << flow.dst_port << "]";
 
-    barrier_wait(FLAGS_barrier_dir, FLAGS_n_clients);
+    barrier_wait(FLAGS_barrier_dir, FLAGS_n_clients, g_keep_running);
     datapath_thread = std::thread(ClientLoop, channel_ctx, &flow);
   } else {
     int ret =

@@ -7,7 +7,9 @@
 
 // Call after machnet_connect(). Writes a ready file, then blocks until
 // n_clients ready files exist in barrier_dir. No-op if barrier_dir is empty.
-inline void barrier_wait(const std::string& barrier_dir, int n_clients) {
+// Exits early if keep_running is cleared (e.g. by SIGTERM/timeout).
+inline void barrier_wait(const std::string& barrier_dir, int n_clients,
+                         const volatile int& keep_running) {
   if (barrier_dir.empty() || n_clients <= 1) return;
 
   std::string ready_file =
@@ -15,7 +17,7 @@ inline void barrier_wait(const std::string& barrier_dir, int n_clients) {
   FILE* f = fopen(ready_file.c_str(), "w");
   if (f) fclose(f);
 
-  while (true) {
+  while (keep_running) {
     int count = 0;
     DIR* dir = opendir(barrier_dir.c_str());
     if (dir) {
