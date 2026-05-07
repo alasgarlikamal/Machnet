@@ -17,6 +17,7 @@
 #include <numeric>
 #include <sstream>
 #include <thread>
+#include "../barrier.h"
 
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
@@ -30,6 +31,8 @@ DEFINE_uint32(msg_size, 64, "Size of the message (request/response) to send.");
 DEFINE_uint32(msg_window, 8, "Maximum number of messages in flight.");
 DEFINE_uint64(msg_nr, UINT64_MAX, "Number of messages to send.");
 DEFINE_bool(verify, false, "Verify payload of received messages.");
+DEFINE_string(barrier_dir, "", "Directory for client sync barrier.");
+DEFINE_int32(n_clients, 1, "Total number of clients (for barrier).");
 
 static volatile int g_keep_running = 1;
 
@@ -350,6 +353,7 @@ int main(int argc, char *argv[]) {
     LOG(INFO) << "[CONNECTED] [" << FLAGS_local_ip << ":" << flow.src_port
               << " <-> " << FLAGS_remote_ip << ":" << flow.dst_port << "]";
 
+    barrier_wait(FLAGS_barrier_dir, FLAGS_n_clients);
     datapath_thread = std::thread(ClientLoop, channel_ctx, &flow);
   } else {
     int ret =

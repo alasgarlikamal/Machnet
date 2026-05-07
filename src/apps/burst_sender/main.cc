@@ -23,6 +23,7 @@
 #include <sstream>
 #include <thread>
 #include <vector>
+#include "../barrier.h"
 
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
@@ -35,6 +36,8 @@ DEFINE_uint32(local_port, 888, "Local port to listen on.");
 DEFINE_uint32(msg_size, 64, "Message payload size in bytes.");
 DEFINE_uint32(burst_size, 32, "Number of messages to send per burst.");
 DEFINE_uint64(msg_nr, UINT64_MAX, "Total number of messages to send.");
+DEFINE_string(barrier_dir, "", "Directory for client sync barrier.");
+DEFINE_int32(n_clients, 1, "Total number of clients (for barrier).");
 
 static volatile int g_keep_running = 1;
 
@@ -189,6 +192,7 @@ int main(int argc, char *argv[]) {
     int ret = machnet_connect(channel_ctx, FLAGS_local_ip.c_str(),
                               FLAGS_remote_ip.c_str(), FLAGS_remote_port, &flow);
     CHECK_EQ(ret, 0) << "machnet_connect failed";
+    barrier_wait(FLAGS_barrier_dir, FLAGS_n_clients);
     datapath = std::thread(ClientLoop, channel_ctx, &flow);
   }
 
